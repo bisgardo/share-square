@@ -1,0 +1,15 @@
+{
+  "name": "share-square",
+  "version": "0.0.0",
+  "description": "Webapp for balancing shared expenses written in Elm.",
+  "scripts": {
+    "fmt": "elm-format --yes ./src",
+    "build": "elm make ./src/Main.elm --output=app.js",
+    "docker": "docker build -t share-square:latest . && docker run --rm -p 8080:80 share-square:latest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "elm": "^0.19.1-5",
+    "elm-format": "^0.8.5"
+  }
+}
