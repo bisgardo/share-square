@@ -13,18 +13,22 @@ npm install
 Compile the Elm sources into a single JavaScript file:
 
 ```shell
-npm run build
+npm run build -- --mode=development
 ```
+
+If the `--mode` arg is omitted, it defaults to "production".
 
 The resulting file `app.js` is included (hard-coded) in `index.html`.
 
 ## Serve
 
-Serve all files in the repository on port `8080`:
+The following command builds the project and starts a hot-reloading server on port `8080`:
 
 ```shell
-npx http-server
+npm run serve -- --mode=development
 ```
+
+The app will open in a browser automatically and the contents refresh whenever the source files change.
 
 ## Docker
 
@@ -43,6 +47,8 @@ docker run --rm -p 8080:80 share-square:latest
 The npm script `npm run docker` runs both of the above commands.
 
 ## Development
+
+### Formatting
 
 The Elm sources are formatted according to the whims of `elm-format`.
 Run `npm run fmt` to reformat all Elm source files in the `src` folder:

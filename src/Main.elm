@@ -4,11 +4,16 @@ import Browser
 import Html
 
 
-main : Program () () ()
+type alias Flags =
+    { environment : String
+    }
+
+
+main : Program Flags Flags ()
 main =
     Browser.document
-        { init = \() -> ( (), Cmd.none )
-        , view = \() -> { title = "Share-square", body = [ Html.text "..." ] }
-        , update = \() () -> ( (), Cmd.none )
-        , subscriptions = \() -> Sub.none
+        { init = \flags -> ( flags, Cmd.none )
+        , view = \model -> { title = "Share-square", body = [ Html.text <| "Environment: " ++ model.environment ] }
+        , update = \() model -> ( model, Cmd.none )
+        , subscriptions = \model -> Sub.none
         }

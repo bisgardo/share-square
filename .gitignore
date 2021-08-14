@@ -2,4 +2,4 @@
 !*ignore
 node_modules
 elm-stuff
-app.js
+dist
