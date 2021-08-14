@@ -28,9 +28,6 @@ module.exports = (env, argv) => ({
             },
         ],
     },
-    plugins: [
-        new webpack.HotModuleReplacementPlugin(),
-    ],
     devServer: {
         inline: true,
         hot: true,
