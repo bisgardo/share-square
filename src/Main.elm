@@ -1,7 +1,9 @@
 module Main exposing (main)
 
 import Browser
-import Html
+import Html exposing (Html)
+import Layout exposing (..)
+import Members
 
 
 type alias Flags =
@@ -10,11 +12,13 @@ type alias Flags =
 
 
 type alias Model =
-    Flags
+    { environment : String
+    , members : Members.Model
+    }
 
 
-type alias Msg =
-    ()
+type Msg
+    = MemberMsg Members.Msg
 
 
 main : Program Flags Model Msg
@@ -29,22 +33,48 @@ main =
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    ( flags, Cmd.none )
+    ( { environment = flags.environment
+      , members = { names = [], input = "" }
+      }
+    , Cmd.none
+    )
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions _ =
     Sub.none
 
 
 view : Model -> Browser.Document Msg
 view model =
     { title = "Share-square"
-    , body =
-        [ Html.text <| "Environment: " ++ model.environment ]
+    , body = [ model |> viewBody ]
     }
+
+
+viewBody : Model -> Html Msg
+viewBody model =
+    container <|
+        [ Html.h1 [] [ Html.text "Members" ]
+        , viewMembers model
+        ]
+
+
+viewMembers : Model -> Html Msg
+viewMembers model =
+    model.members
+        |> Members.view
+        |> Html.map MemberMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    ( model, Cmd.none )
+    case msg of
+        MemberMsg memberMsg ->
+            let
+                ( newMembersModel, newMembersCmd ) =
+                    Members.update memberMsg model.members
+            in
+            ( { model | members = newMembersModel }
+            , Cmd.map MemberMsg newMembersCmd
+            )
