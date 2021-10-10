@@ -1,6 +1,7 @@
 module Main exposing (main)
 
 import Browser
+import Expenses
 import Html exposing (Html)
 import Layout exposing (..)
 import Members
@@ -14,11 +15,13 @@ type alias Flags =
 type alias Model =
     { environment : String
     , members : Members.Model
+    , expenses : Expenses.Model
     }
 
 
 type Msg
     = MemberMsg Members.Msg
+    | ExpenseMsg Expenses.Msg
 
 
 main : Program Flags Model Msg
@@ -34,20 +37,21 @@ main =
 init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( { environment = flags.environment
-      , members = { names = [], input = "" }
+      , members = Members.init
+      , expenses = Expenses.init
       }
     , Cmd.none
     )
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.none
+subscriptions model =
+    model.expenses |> Expenses.subscriptions |> Sub.map ExpenseMsg
 
 
 view : Model -> Browser.Document Msg
 view model =
-    { title = "Share-square"
+    { title = "Share 'n square"
     , body = [ model |> viewBody ]
     }
 
@@ -55,16 +59,30 @@ view model =
 viewBody : Model -> Html Msg
 viewBody model =
     container <|
-        [ Html.h1 [] [ Html.text "Members" ]
-        , viewMembers model
-        ]
+        viewMembers model
+            ++ viewExpenses model
 
 
-viewMembers : Model -> Html Msg
+viewMembers : Model -> List (Html Msg)
 viewMembers model =
-    model.members
+    [ Html.h1 [] [ Html.text "Members" ]
+    , model.members
         |> Members.view
         |> Html.map MemberMsg
+    ]
+
+
+viewExpenses : Model -> List (Html Msg)
+viewExpenses model =
+    if List.length model.members.members > 0 then
+        [ Html.h1 [] [ Html.text "Expenses" ]
+        , model.expenses
+            |> Expenses.view model.members.members
+            |> Html.map ExpenseMsg
+        ]
+
+    else
+        []
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -77,4 +95,13 @@ update msg model =
             in
             ( { model | members = newMembersModel }
             , Cmd.map MemberMsg newMembersCmd
+            )
+
+        ExpenseMsg expenseMsg ->
+            let
+                ( newExpensesModel, newExpensesCmd ) =
+                    Expenses.update model.members.members expenseMsg model.expenses
+            in
+            ( { model | expenses = newExpensesModel }
+            , Cmd.map ExpenseMsg newExpensesCmd
             )
