@@ -34,7 +34,7 @@ main =
 init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( { environment = flags.environment
-      , members = { names = [], input = "" }
+      , members = Members.init
       }
     , Cmd.none
     )
@@ -47,7 +47,7 @@ subscriptions _ =
 
 view : Model -> Browser.Document Msg
 view model =
-    { title = "Share-square"
+    { title = "Share 'n square"
     , body = [ model |> viewBody ]
     }
 
@@ -55,16 +55,16 @@ view model =
 viewBody : Model -> Html Msg
 viewBody model =
     container <|
-        [ Html.h1 [] [ Html.text "Members" ]
-        , viewMembers model
-        ]
+        viewMembers model
 
 
-viewMembers : Model -> Html Msg
+viewMembers : Model -> List (Html Msg)
 viewMembers model =
-    model.members
+    [ Html.h1 [] [ Html.text "Members" ]
+    , model.members
         |> Members.view
         |> Html.map MemberMsg
+    ]
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )

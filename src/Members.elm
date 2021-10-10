@@ -6,13 +6,35 @@ import Html.Events exposing (onInput, onSubmit)
 import Layout exposing (..)
 
 
-type alias Name =
-    String
+type alias Member =
+    { id : Int
+    , name : String
+    }
 
 
 type alias Model =
-    { names : List Name
-    , input : String
+    { create : CreateModel
+    , members : List Member
+    , nextMemberId : Int
+    }
+
+
+type alias CreateModel =
+    { name : String
+    }
+
+
+init : Model
+init =
+    { create = initCreate
+    , members = []
+    , nextMemberId = 1
+    }
+
+
+initCreate : CreateModel
+initCreate =
+    { name = ""
     }
 
 
@@ -24,12 +46,12 @@ type Msg
 view : Model -> Html Msg
 view model =
     row
-        [ model.names |> (row1 << col << List.map (row1 << col1 << text))
-        , model |> (row1 << col1 << viewCreate)
+        [ model.members |> List.map .name |> (row1 << col << List.map (row1 << col1 << text))
+        , model.create |> (row1 << col1 << viewCreate)
         ]
 
 
-viewCreate : Model -> Html Msg
+viewCreate : CreateModel -> Html Msg
 viewCreate model =
     Html.form
         [ onSubmit CreateSubmit
@@ -40,11 +62,12 @@ viewCreate model =
             [ Html.input
                 [ class "form-control"
                 , onInput CreateUpdate
-                , value model.input
+                , value model.name
                 ]
                 []
             , Html.button
                 [ class "btn btn-primary"
+                , String.isEmpty model.name |> Html.Attributes.disabled
                 ]
                 [ text "Add" ]
             ]
@@ -54,12 +77,27 @@ viewCreate model =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        CreateUpdate input ->
-            ( { model | input = input }
+        CreateUpdate name ->
+            ( { model
+                | create = { name = name }
+              }
             , Cmd.none
             )
 
         CreateSubmit ->
-            ( { model | names = model.names ++ [ model.input ], input = "" }
-            , Cmd.none
-            )
+            case model.create.name of
+                "" ->
+                    let
+                        _ =
+                            Debug.log "error" "cannot create member with empty name"
+                    in
+                    ( model, Cmd.none )
+
+                name ->
+                    ( { model
+                        | members = model.members ++ [ { id = model.nextMemberId, name = name } ]
+                        , create = initCreate
+                        , nextMemberId = model.nextMemberId + 1
+                      }
+                    , Cmd.none
+                    )

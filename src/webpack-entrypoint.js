@@ -1,6 +1,7 @@
 'use strict';
 
-// Import CSS directly into 'app.js'. It will be automagically imported into the HTML from there.
+// Import CSS directly into 'app.js'.
+// It will be imported into the HTML from there (presumably through the webpack CSS plugins).
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 // Import all the Elm code.
