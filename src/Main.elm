@@ -1,6 +1,7 @@
 module Main exposing (main)
 
 import Browser
+import Computation
 import Expenses
 import Html exposing (Html)
 import Layout exposing (..)
@@ -59,8 +60,11 @@ view model =
 viewBody : Model -> Html Msg
 viewBody model =
     container <|
-        viewMembers model
-            ++ viewExpenses model
+        List.concat
+            [ viewMembers model
+            , viewExpenses model
+            , viewComputation model
+            ]
 
 
 viewMembers : Model -> List (Html Msg)
@@ -79,6 +83,17 @@ viewExpenses model =
         , model.expenses
             |> Expenses.view model.members.members
             |> Html.map ExpenseMsg
+        ]
+
+    else
+        []
+
+
+viewComputation : Model -> List (Html Msg)
+viewComputation model =
+    if List.length model.expenses.expenses > 0 then
+        [ Html.h1 [] [ Html.text "Computation" ]
+        , Computation.view model.members.members model.expenses.expenses
         ]
 
     else

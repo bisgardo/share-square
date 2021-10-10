@@ -4,6 +4,7 @@ import Html exposing (Html, div, text)
 import Html.Attributes exposing (class, value)
 import Html.Events exposing (onInput, onSubmit)
 import Layout exposing (..)
+import List.Extra as List
 
 
 type alias Member =
@@ -17,6 +18,13 @@ toField member =
     { key = String.fromInt member.id
     , value = member.name
     }
+
+
+nameFromId : Int -> List Member -> String
+nameFromId id =
+    List.find (.id >> (==) id)
+        >> Maybe.map .name
+        >> Maybe.withDefault ("<" ++ String.fromInt id ++ ">")
 
 
 type alias Model =

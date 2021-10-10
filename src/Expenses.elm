@@ -5,9 +5,9 @@ import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events
 import Layout exposing (..)
-import List.Extra as List
 import Maybe.Extra as Maybe
 import Members exposing (Member)
+import Round
 import Set exposing (Set)
 import Util
 
@@ -151,14 +151,14 @@ viewExpenses members expenseModels =
             List.map
                 (\expense ->
                     Html.tr []
-                        ([ Html.td [] [ List.find (.id >> (==) expense.payer) members |> Maybe.map .name |> Maybe.withDefault "<?>" |> Html.text ]
-                         , Html.td [] [ expense.amount |> String.fromFloat |> Html.text ]
+                        ([ Html.td [] [ members |> Members.nameFromId expense.payer |> Html.text ]
+                         , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
                          ]
                             ++ List.map
                                 (\member ->
                                     Html.td []
                                         (if Dict.member member.id expense.receivers then
-                                            [ Html.text "\u{2713}" ]
+                                            [ Html.text "✓" ]
 
                                          else
                                             []

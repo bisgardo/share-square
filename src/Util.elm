@@ -20,3 +20,13 @@ parseDictKeys parse =
                 )
         )
         (Ok Dict.empty)
+
+
+sumDictValues : Dict comparable number -> Dict comparable number -> Dict comparable number
+sumDictValues source target =
+    Dict.foldl
+        (\key value ->
+            Dict.update key (Maybe.withDefault 0 >> (+) value >> Just)
+        )
+        target
+        source
