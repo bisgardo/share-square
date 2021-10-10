@@ -8,9 +8,11 @@
     "serve": "webpack serve --hot --port 8080 --open",
     "docker": "docker build -t share-square:latest . && docker run --rm -p 8080:80 share-square:latest"
   },
-  "dependencies": {},
-  "devDependencies": {
+  "dependencies": {
     "bootstrap": "^5.1.1",
+    "@popperjs/core": "^2.10.1"
+  },
+  "devDependencies": {
     "css-loader": "^6.3.0",
     "elm": "^0.19.1-5",
     "elm-format": "^0.8.5",

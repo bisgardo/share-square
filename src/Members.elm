@@ -12,6 +12,13 @@ type alias Member =
     }
 
 
+toField : Member -> Field
+toField member =
+    { key = String.fromInt member.id
+    , value = member.name
+    }
+
+
 type alias Model =
     { create : CreateModel
     , members : List Member
