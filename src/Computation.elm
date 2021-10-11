@@ -6,51 +6,64 @@ import Html exposing (Html, div, text)
 import Layout exposing (..)
 import Members exposing (Member)
 import Round
-import Util
+import Util.Dict as Dict
 
 
-view : List Member -> List Expense -> Html msg
+view : List Member -> Expenses -> Html msg
 view members expenses =
-    row <|
-        -- TODO Reduce (and invert?) the debt thing
-        (debtsFromExpenses expenses
-            |> flattenBiKeyDict
-            |> List.map
-                (\( payer, receiver, amount ) ->
-                    div []
-                        [ text <|
-                            "Payer: "
-                                ++ Members.nameFromId payer members
-                                ++ ", receiver: "
-                                ++ Members.nameFromId receiver members
-                                ++ ", amount: "
-                                ++ (amount |> Round.round 2)
-                        ]
-                )
-        )
+    row
+        [ div [] <|
+            [ Html.h2 [] [ text "Outlays" ] ]
+                ++ (expenses
+                        |> Dict.toFlatList
+                        |> List.map
+                            (\( payer, receiver, amount ) ->
+                                div []
+                                    [ text <|
+                                        Members.nameFromId payer members
+                                            ++ " has expended "
+                                            ++ (amount |> Round.round 2)
+                                            ++ " for "
+                                            ++ Members.nameFromId receiver members
+                                            ++ "."
+                                    ]
+                            )
+                   )
+        , div [] <|
+            [ Html.h2 [] [ text "Debt/receivables" ] ]
+                ++ (expenses
+                        |> invert
+                        |> Dict.toFlatList
+                        |> List.map
+                            (\( receiver, payer, amount ) ->
+                                div []
+                                    [ text <|
+                                        Members.nameFromId receiver members
+                                            ++ " owes "
+                                            ++ Members.nameFromId payer members
+                                            ++ " "
+                                            ++ (amount |> Round.round 2)
+                                            ++ "."
+                                    ]
+                            )
+                   )
+        ]
 
 
-flattenBiKeyDict : Dict a (Dict b c) -> List ( a, b, c )
-flattenBiKeyDict =
-    Dict.toList
-        >> List.map
-            (\( outerKey, innerDict ) ->
-                innerDict
-                    |> Dict.toList
-                    |> List.map
-                        (\( innerKey, value ) ->
-                            ( outerKey, innerKey, value )
-                        )
-            )
-        >> List.concat
-
-
-type alias Debt =
+{-| A dict from ID of payer to dict from ID of receiver to totally expensed amount.
+-}
+type alias Expenses =
     Dict Int (Dict Int Float)
 
 
-debtsFromExpenses : List Expense -> Debt
-debtsFromExpenses =
+{-| A dict from ID of receiver to dict from ID of payer to totally expensed amount.
+-}
+type alias Debt =
+    Expenses
+
+
+expensesFromList : List Expense -> Expenses
+expensesFromList =
     List.foldl
         (\expense ->
             let
@@ -72,8 +85,30 @@ debtsFromExpenses =
             in
             Dict.update expense.payer
                 (Maybe.withDefault Dict.empty
-                    >> Util.sumDictValues weightedDebt
+                    >> Dict.sumValues weightedDebt
                     >> Just
                 )
+        )
+        Dict.empty
+
+
+invert : Expenses -> Debt
+invert =
+    Dict.foldl
+        (\payer payerExpenses result ->
+            Dict.foldl
+                (\receiver amount ->
+                    Dict.update receiver
+                        (Maybe.withDefault Dict.empty
+                            >> Dict.update payer
+                                (Maybe.withDefault 0
+                                    >> (+) amount
+                                    >> Just
+                                )
+                            >> Just
+                        )
+                )
+                result
+                payerExpenses
         )
         Dict.empty

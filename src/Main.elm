@@ -6,6 +6,7 @@ import Expenses
 import Html exposing (Html)
 import Layout exposing (..)
 import Members
+import Util.List as List
 
 
 type alias Flags =
@@ -47,7 +48,9 @@ init flags =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    model.expenses |> Expenses.subscriptions |> Sub.map ExpenseMsg
+    model.expenses
+        |> Expenses.subscriptions
+        |> Sub.map ExpenseMsg
 
 
 view : Model -> Browser.Document Msg
@@ -78,26 +81,20 @@ viewMembers model =
 
 viewExpenses : Model -> List (Html Msg)
 viewExpenses model =
-    if List.length model.members.members > 0 then
+    List.ifNonEmpty model.members.members <|
         [ Html.h1 [] [ Html.text "Expenses" ]
         , model.expenses
             |> Expenses.view model.members.members
             |> Html.map ExpenseMsg
         ]
 
-    else
-        []
-
 
 viewComputation : Model -> List (Html Msg)
 viewComputation model =
-    if List.length model.expenses.expenses > 0 then
+    List.ifNonEmpty model.expenses.expenses <|
         [ Html.h1 [] [ Html.text "Computation" ]
-        , Computation.view model.members.members model.expenses.expenses
+        , Computation.view model.members.members <| Computation.expensesFromList model.expenses.expenses
         ]
-
-    else
-        []
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )

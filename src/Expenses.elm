@@ -9,7 +9,8 @@ import Maybe.Extra as Maybe
 import Members exposing (Member)
 import Round
 import Set exposing (Set)
-import Util
+import Util.Update as Update
+import Util.Dict as Dict
 
 
 type Msg
@@ -60,7 +61,7 @@ create model =
 
         receiverResult =
             model.receivers
-                |> Util.parseDictKeys
+                |> Dict.parseKeys
                     (\key ->
                         key
                             |> String.toInt
@@ -217,7 +218,7 @@ update members msg model =
                       }
                     , Cmd.none
                     )
-                        |> Util.chainUpdate CloseModal (update members)
+                        |> Update.chain CloseModal (update members)
 
         CloseModal ->
             ( model, closeModal createModalId )
