@@ -9,8 +9,8 @@ import Maybe.Extra as Maybe
 import Members exposing (Member)
 import Round
 import Set exposing (Set)
-import Util.Update as Update
 import Util.Dict as Dict
+import Util.Update as Update
 
 
 type Msg
@@ -103,7 +103,7 @@ createModalId =
     "add-expense"
 
 
-view : List Member -> Model -> Html Msg
+view : Members.Model -> Model -> Html Msg
 view members model =
     row1 <|
         Html.form [ Html.Events.onSubmit CreateSubmit ] <|
@@ -125,11 +125,11 @@ view members model =
                 ++ viewExpenses members model.expenses
 
 
-viewAdd : List Member -> CreateModel -> List (Html Msg)
+viewAdd : Members.Model -> CreateModel -> List (Html Msg)
 viewAdd members model =
     let
         membersFields =
-            List.map Members.toField members
+            List.map Members.toField members.members
     in
     [ optionsInput "new-expense-payer" "Payer" membersFields model.payerId CreateEditPayer
     , textInput "Amount" model.amount CreateEditAmount
@@ -137,22 +137,23 @@ viewAdd members model =
     ]
 
 
-viewExpenses : List Member -> List Expense -> List (Html Msg)
-viewExpenses members expenseModels =
-    [ Html.table [ class "table" ] <|
+viewExpenses : Members.Model -> List Expense -> List (Html Msg)
+viewExpenses membersModel expenseModels =
+    [ Html.table [ class "table" ]
         [ Html.thead []
-            [ Html.tr []
-                ([ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
-                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
-                 ]
-                    ++ List.map (.name >> Html.text >> List.singleton >> Html.th [ Html.Attributes.scope "col" ]) members
-                )
+            [ Html.tr [] <|
+                [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
+                ]
+                    ++ List.map
+                        (.name >> Html.text >> List.singleton >> Html.th [ Html.Attributes.scope "col" ])
+                        membersModel.members
             ]
         , Html.tbody [] <|
             List.map
                 (\expense ->
                     Html.tr []
-                        ([ Html.td [] [ members |> Members.nameFromId expense.payer |> Html.text ]
+                        ([ Html.td [] [ Members.lookupName expense.payer membersModel.names |> Html.text ]
                          , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
                          ]
                             ++ List.map
@@ -165,7 +166,7 @@ viewExpenses members expenseModels =
                                             []
                                         )
                                 )
-                                members
+                                membersModel.members
                         )
                 )
                 expenseModels
@@ -178,21 +179,23 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : List Member -> Msg -> Model -> ( Model, Cmd Msg )
+update : List Member -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update members msg model =
     case msg of
         LoadCreate ->
-            ( { model
-                | create =
-                    members
-                        |> List.head
-                        |> Maybe.map
-                            (\firstMember ->
-                                initCreate
-                                    (firstMember.id |> String.fromInt)
-                                    (members |> List.map (.id >> String.fromInt) |> List.map (\key -> ( key, 1.0 )) |> Dict.fromList)
-                            )
-              }
+            ( ( { model
+                    | create =
+                        members
+                            |> List.head
+                            |> Maybe.map
+                                (\firstMember ->
+                                    initCreate
+                                        (firstMember.id |> String.fromInt)
+                                        (members |> List.map (.id >> String.fromInt) |> List.map (\key -> ( key, 1.0 )) |> Dict.fromList)
+                                )
+                }
+              , False
+              )
             , Cmd.none
             )
 
@@ -209,67 +212,74 @@ update members msg model =
                         _ =
                             Debug.log "error" error
                     in
-                    ( model, Cmd.none )
+                    ( ( model, False ), Cmd.none )
 
                 Ok value ->
-                    ( { model
-                        | expenses =
-                            model.expenses ++ [ value ]
-                      }
-                    , Cmd.none
+                    ( ( { model
+                            | expenses =
+                                model.expenses ++ [ value ]
+                        }
+                      , True
+                      )
+                    , Update.delegate CloseModal
                     )
-                        |> Update.chain CloseModal (update members)
 
         CloseModal ->
-            ( model, closeModal createModalId )
+            ( ( model, False ), closeModal createModalId )
 
         CreateEditAmount amount ->
-            ( { model
-                | create =
-                    model.create
-                        |> Maybe.map
-                            (\createModel ->
-                                let
-                                    amountField =
-                                        createModel.amount
-                                in
-                                { createModel
-                                    | amount =
-                                        { amountField
-                                            | value = amount
-                                            , validationError = validateAmount amount
-                                        }
-                                }
-                            )
-              }
+            ( ( { model
+                    | create =
+                        model.create
+                            |> Maybe.map
+                                (\createModel ->
+                                    let
+                                        amountField =
+                                            createModel.amount
+                                    in
+                                    { createModel
+                                        | amount =
+                                            { amountField
+                                                | value = amount
+                                                , validationError = validateAmount amount
+                                            }
+                                    }
+                                )
+                }
+              , False
+              )
             , Cmd.none
             )
 
         CreateEditPayer payer ->
-            ( { model
-                | create =
-                    model.create
-                        |> Maybe.map (\createModel -> { createModel | payerId = payer })
-              }
+            ( ( { model
+                    | create =
+                        model.create
+                            |> Maybe.map (\createModel -> { createModel | payerId = payer })
+                }
+              , False
+              )
             , Cmd.none
             )
 
         CreateEditReceiver receiverKey checked ->
-            ( { model
-                | create =
-                    model.create
-                        |> Maybe.map
-                            (\createModel ->
-                                { createModel
-                                    | receivers =
-                                        if checked then
-                                            Dict.insert receiverKey 1.0 createModel.receivers
+            ( ( { model
+                    | create =
+                        model.create
+                            |> Maybe.map
+                                (\createModel ->
+                                    { createModel
+                                        | receivers =
+                                            if checked then
+                                                Dict.insert receiverKey 1.0 createModel.receivers
 
-                                        else
-                                            Dict.remove receiverKey createModel.receivers
-                                }
-                            )
-              }
+                                            else
+                                                Dict.remove receiverKey createModel.receivers
+                                    }
+                                )
+                }
+              , False
+              )
             , Cmd.none
             )
 
@@ -277,10 +287,10 @@ update members msg model =
             case layoutMsg of
                 ModalClosed modalId ->
                     if modalId == createModalId then
-                        ( { model | create = Nothing }, Cmd.none )
+                        ( ( { model | create = Nothing }, False ), Cmd.none )
 
                     else
-                        ( model, Cmd.none )
+                        ( ( model, False ), Cmd.none )
 
 
 validateAmount : String -> Maybe String

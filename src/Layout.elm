@@ -180,7 +180,6 @@ checkboxesInput label fields checkedKeys tagger =
                         ]
                 )
                 fields
-            
         ]
 
 

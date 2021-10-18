@@ -2,6 +2,7 @@ module Util.Dict exposing (..)
 
 import Dict exposing (Dict)
 
+
 parseKeys : (a -> Result x comparable) -> Dict a c -> Result x (Dict comparable c)
 parseKeys parse =
     Dict.foldl
@@ -38,3 +39,10 @@ toFlatList =
                         )
             )
         >> List.concat
+
+
+valueSum : comparable -> Dict comparable (Dict b number) -> number
+valueSum key =
+    Dict.get key
+        >> Maybe.map (Dict.values >> List.sum)
+        >> Maybe.withDefault 0
