@@ -49,49 +49,57 @@ viewSummary : Dict Int String -> Model -> Html Msg
 viewSummary members model =
     div []
         [ Html.h1 [] [ text "Summary" ]
-        , div [ Html.Attributes.class "form-check" ]
-            [ Html.input [ Html.Attributes.class "form-check-input", Html.Attributes.id "computation-invert", Html.Attributes.type_ "checkbox", Html.Attributes.checked model.viewInverted, Html.Events.onCheck SetInvert ] []
-            , Html.label [ Html.Attributes.class "form-check-label", Html.Attributes.for "computation-invert" ] [ text "Invert" ]
+        , Html.p []
+            [ div [ Html.Attributes.class "form-check form-check-inline" ]
+                [ Html.input [ Html.Attributes.class "form-check-input", Html.Attributes.id "computation-summary-outlay", Html.Attributes.type_ "radio", Html.Attributes.checked (not model.viewInverted), Html.Events.onCheck (\_ -> SetInvert False) ] []
+                , Html.label [ Html.Attributes.class "form-check-label", Html.Attributes.for "computation-summary-outlay" ] [ text "Outlays" ]
+                ]
+            , div [ Html.Attributes.class "form-check form-check-inline" ]
+                [ Html.input [ Html.Attributes.class "form-check-input", Html.Attributes.id "computation-summary-debt", Html.Attributes.type_ "radio", Html.Attributes.checked model.viewInverted, Html.Events.onCheck (\_ -> SetInvert True) ] []
+                , Html.label [ Html.Attributes.class "form-check-label", Html.Attributes.for "computation-summary-debt" ] [ text "Debt" ]
+                ]
             ]
         , case model.computed of
             Nothing ->
                 div [] [ Html.em [] [ text "No result available yet." ] ]
 
             Just computed ->
-                div [] <|
-                    if model.viewInverted then
-                        computed.debts
-                            |> Dict.toFlatList
-                            |> List.map
-                                (\( receiver, payer, amount ) ->
-                                    ( Members.lookupName receiver members
-                                    , Members.lookupName payer members
-                                    , amount |> Round.round 2
+                Html.p []
+                    [ Html.ul [] <|
+                        if model.viewInverted then
+                            computed.debts
+                                |> Dict.toFlatList
+                                |> List.map
+                                    (\( receiver, payer, amount ) ->
+                                        ( Members.lookupName receiver members
+                                        , Members.lookupName payer members
+                                        , amount |> Round.round 2
+                                        )
                                     )
-                                )
-                            |> List.sort
-                            |> List.map
-                                (\( receiver, payer, amount ) ->
-                                    div []
-                                        [ receiver ++ " owes " ++ payer ++ " " ++ amount ++ "." |> text ]
-                                )
+                                |> List.sort
+                                |> List.map
+                                    (\( receiver, payer, amount ) ->
+                                        Html.li []
+                                            [ receiver ++ " owes " ++ payer ++ " " ++ amount ++ "." |> text ]
+                                    )
 
-                    else
-                        computed.expenses
-                            |> Dict.toFlatList
-                            |> List.map
-                                (\( payer, receiver, amount ) ->
-                                    ( Members.lookupName payer computed.members
-                                    , Members.lookupName receiver computed.members
-                                    , amount |> Round.round 2
+                        else
+                            computed.expenses
+                                |> Dict.toFlatList
+                                |> List.map
+                                    (\( payer, receiver, amount ) ->
+                                        ( Members.lookupName payer computed.members
+                                        , Members.lookupName receiver computed.members
+                                        , amount |> Round.round 2
+                                        )
                                     )
-                                )
-                            |> List.sort
-                            |> List.map
-                                (\( payer, receiver, amount ) ->
-                                    div []
-                                        [ payer ++ " has expended " ++ amount ++ " for " ++ receiver ++ "." |> text ]
-                                )
+                                |> List.sort
+                                |> List.map
+                                    (\( payer, receiver, amount ) ->
+                                        Html.li []
+                                            [ payer ++ " has expended " ++ amount ++ " for " ++ receiver ++ "." |> text ]
+                                    )
+                    ]
         ]
 
 
@@ -99,8 +107,9 @@ viewBalance : Dict Int String -> Model -> Html Msg
 viewBalance members model =
     div [] <|
         [ Html.h1 [] [ text "Balances" ]
-        ]
-            ++ (case model.computed of
+        , Html.p []
+            [ Html.ul []
+                (case model.computed of
                     Nothing ->
                         []
 
@@ -124,9 +133,11 @@ viewBalance members model =
                             |> List.sort
                             |> List.map
                                 (\( member, amount ) ->
-                                    Html.div [] [ member ++ ": " ++ amount |> text ]
+                                    Html.li [] [ member ++ ": " ++ amount |> text ]
                                 )
-               )
+                )
+            ]
+        ]
 
 
 {-| A dict from ID of payer to dict from ID of receiver to totally expensed amount.
