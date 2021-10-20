@@ -1,10 +1,14 @@
 module Main exposing (main)
 
 import Browser
+import Browser.Dom as Dom
+import Computation
 import Expenses
 import Html exposing (Html)
 import Layout exposing (..)
 import Members
+import Task
+import Util.List as List
 
 
 type alias Flags =
@@ -16,12 +20,15 @@ type alias Model =
     { environment : String
     , members : Members.Model
     , expenses : Expenses.Model
+    , computation : Computation.Model
     }
 
 
 type Msg
     = MemberMsg Members.Msg
     | ExpenseMsg Expenses.Msg
+    | ComputationMsg Computation.Msg
+    | DomMsg (Result Dom.Error ())
 
 
 main : Program Flags Model Msg
@@ -39,14 +46,17 @@ init flags =
     ( { environment = flags.environment
       , members = Members.init
       , expenses = Expenses.init
+      , computation = Computation.init
       }
-    , Cmd.none
+    , Dom.focus Members.createId |> Task.attempt DomMsg
     )
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    model.expenses |> Expenses.subscriptions |> Sub.map ExpenseMsg
+    model.expenses
+        |> Expenses.subscriptions
+        |> Sub.map ExpenseMsg
 
 
 view : Model -> Browser.Document Msg
@@ -59,8 +69,11 @@ view model =
 viewBody : Model -> Html Msg
 viewBody model =
     container <|
-        viewMembers model
-            ++ viewExpenses model
+        List.concat
+            [ viewMembers model
+            , viewExpenses model
+            , viewComputation model
+            ]
 
 
 viewMembers : Model -> List (Html Msg)
@@ -74,15 +87,21 @@ viewMembers model =
 
 viewExpenses : Model -> List (Html Msg)
 viewExpenses model =
-    if List.length model.members.members > 0 then
+    List.ifNonEmpty model.members.members <|
         [ Html.h1 [] [ Html.text "Expenses" ]
         , model.expenses
-            |> Expenses.view model.members.members
+            |> Expenses.view model.members
             |> Html.map ExpenseMsg
         ]
 
-    else
-        []
+
+viewComputation : Model -> List (Html Msg)
+viewComputation model =
+    List.ifNonEmpty model.expenses.expenses
+        [ model.computation
+            |> Computation.view model.members.names
+            |> Html.map ComputationMsg
+        ]
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -99,9 +118,41 @@ update msg model =
 
         ExpenseMsg expenseMsg ->
             let
-                ( newExpensesModel, newExpensesCmd ) =
+                ( ( newExpensesModel, recompute ), newExpensesCmd ) =
                     Expenses.update model.members.members expenseMsg model.expenses
+
+                ( newComputationModel, newComputationCmd ) =
+                    if recompute then
+                        Computation.Recompute model.members.members newExpensesModel.expenses
+                            |> Computation.update model.computation
+
+                    else
+                        ( model.computation, Cmd.none )
             in
-            ( { model | expenses = newExpensesModel }
-            , Cmd.map ExpenseMsg newExpensesCmd
+            ( { model
+                | expenses = newExpensesModel
+                , computation = newComputationModel
+              }
+            , Cmd.batch [ Cmd.map ExpenseMsg newExpensesCmd, Cmd.map ComputationMsg newComputationCmd ]
             )
+
+        ComputationMsg computationMsg ->
+            let
+                ( newComputationModel, newComputationCmd ) =
+                    Computation.update model.computation computationMsg
+            in
+            ( { model | computation = newComputationModel }
+            , Cmd.map ComputationMsg newComputationCmd
+            )
+
+        DomMsg result ->
+            let
+                _ =
+                    case result of
+                        Err (Dom.NotFound id) ->
+                            Debug.log "DOM error: Element not found" id
+
+                        Ok () ->
+                            ""
+            in
+            ( model, Cmd.none )

@@ -1,7 +1,8 @@
 module Members exposing (..)
 
+import Dict exposing (Dict)
 import Html exposing (Html, div, text)
-import Html.Attributes exposing (class, value)
+import Html.Attributes exposing (class, id, value)
 import Html.Events exposing (onInput, onSubmit)
 import Layout exposing (..)
 
@@ -19,9 +20,16 @@ toField member =
     }
 
 
+lookupName : Int -> Dict Int String -> String
+lookupName id =
+    Dict.get id
+        >> Maybe.withDefault ("<" ++ String.fromInt id ++ ">")
+
+
 type alias Model =
     { create : CreateModel
     , members : List Member
+    , names : Dict Int String
     , nextMemberId : Int
     }
 
@@ -35,6 +43,7 @@ init : Model
 init =
     { create = initCreate
     , members = []
+    , names = Dict.empty
     , nextMemberId = 1
     }
 
@@ -48,6 +57,11 @@ initCreate =
 type Msg
     = CreateUpdate String
     | CreateSubmit
+
+
+createId : String
+createId =
+    "member-create-input"
 
 
 view : Model -> Html Msg
@@ -67,7 +81,8 @@ viewCreate model =
             [ class "input-group"
             ]
             [ Html.input
-                [ class "form-control"
+                [ id createId
+                , class "form-control"
                 , onInput CreateUpdate
                 , value model.name
                 ]
@@ -100,11 +115,36 @@ update msg model =
                     in
                     ( model, Cmd.none )
 
-                name ->
+                rawName ->
+                    let
+                        id =
+                            model.nextMemberId
+
+                        name =
+                            rawName |> cleanName
+
+                        newNextMemberId =
+                            model.nextMemberId + 1
+                    in
                     ( { model
-                        | members = model.members ++ [ { id = model.nextMemberId, name = name } ]
+                        | members =
+                            model.members
+                                ++ [ { id = id, name = name } ]
+                                -- Keep the member list sorted by name.
+                                |> List.sortBy (.name >> String.toLower)
+                        , names = model.names |> Dict.insert id name
                         , create = initCreate
-                        , nextMemberId = model.nextMemberId + 1
+                        , nextMemberId = newNextMemberId
                       }
                     , Cmd.none
                     )
+
+
+cleanName : String -> String
+cleanName =
+    String.uncons
+        >> Maybe.map
+            (\( first, rest ) ->
+                String.toUpper (String.fromChar first) ++ rest
+            )
+        >> Maybe.withDefault ""
