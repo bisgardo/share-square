@@ -12,14 +12,14 @@ import Util.Dict as Dict
 
 
 type alias Model =
-    { viewInverted : Bool
+    { summaryPerspective : SummaryPerspective
     , computed : Maybe ComputedModel
     }
 
 
 init : Model
 init =
-    { viewInverted = False
+    { summaryPerspective = SummaryPerspectiveOutlays
     , computed = Nothing
     }
 
@@ -32,8 +32,13 @@ type alias ComputedModel =
     }
 
 
+type SummaryPerspective
+    = SummaryPerspectiveOutlays
+    | SummaryPerspectiveDebt
+
+
 type Msg
-    = SetInvert Bool
+    = SetSummaryPerspective SummaryPerspective
     | Recompute (List Member) (List Expense)
 
 
@@ -51,54 +56,77 @@ viewSummary members model =
         [ Html.h1 [] [ text "Summary" ]
         , Html.p []
             [ div [ Html.Attributes.class "form-check form-check-inline" ]
-                [ Html.input [ Html.Attributes.class "form-check-input", Html.Attributes.id "computation-summary-outlay", Html.Attributes.type_ "radio", Html.Attributes.checked (not model.viewInverted), Html.Events.onCheck (\_ -> SetInvert False) ] []
-                , Html.label [ Html.Attributes.class "form-check-label", Html.Attributes.for "computation-summary-outlay" ] [ text "Outlays" ]
+                [ Html.input
+                    [ Html.Attributes.class "form-check-input"
+                    , Html.Attributes.id "computation-summary-outlay"
+                    , Html.Attributes.type_ "radio"
+                    , model.summaryPerspective == SummaryPerspectiveOutlays |> Html.Attributes.checked 
+                    , Html.Events.onCheck (\_ -> SetSummaryPerspective SummaryPerspectiveOutlays)
+                    ]
+                    []
+                , Html.label
+                    [ Html.Attributes.class "form-check-label"
+                    , Html.Attributes.for "computation-summary-outlay"
+                    ]
+                    [ text "Outlays" ]
                 ]
             , div [ Html.Attributes.class "form-check form-check-inline" ]
-                [ Html.input [ Html.Attributes.class "form-check-input", Html.Attributes.id "computation-summary-debt", Html.Attributes.type_ "radio", Html.Attributes.checked model.viewInverted, Html.Events.onCheck (\_ -> SetInvert True) ] []
-                , Html.label [ Html.Attributes.class "form-check-label", Html.Attributes.for "computation-summary-debt" ] [ text "Debt" ]
+                [ Html.input
+                    [ Html.Attributes.class "form-check-input"
+                    , Html.Attributes.id "computation-summary-debt"
+                    , Html.Attributes.type_ "radio"
+                    , model.summaryPerspective == SummaryPerspectiveDebt |> Html.Attributes.checked 
+                    , Html.Events.onCheck (\_ -> SetSummaryPerspective SummaryPerspectiveDebt)
+                    ]
+                    []
+                , Html.label
+                    [ Html.Attributes.class "form-check-label"
+                    , Html.Attributes.for "computation-summary-debt"
+                    ]
+                    [ text "Debt" ]
                 ]
             ]
         , case model.computed of
             Nothing ->
-                div [] [ Html.em [] [ text "No result available yet." ] ]
+                Html.p [] [ Html.em [] [ text "No result available yet." ] ]
 
             Just computed ->
                 Html.p []
                     [ Html.ul [] <|
-                        if model.viewInverted then
-                            computed.debts
-                                |> Dict.toFlatList
-                                |> List.map
-                                    (\( receiver, payer, amount ) ->
-                                        ( Members.lookupName receiver members
-                                        , Members.lookupName payer members
-                                        , amount |> Round.round 2
+                        case model.summaryPerspective of
+                            SummaryPerspectiveOutlays ->
+                                computed.expenses
+                                    |> Dict.toFlatList
+                                    |> List.map
+                                        (\( payer, receiver, amount ) ->
+                                            ( Members.lookupName payer computed.members
+                                            , Members.lookupName receiver computed.members
+                                            , amount |> Round.round 2
+                                            )
                                         )
-                                    )
-                                |> List.sort
-                                |> List.map
-                                    (\( receiver, payer, amount ) ->
-                                        Html.li []
-                                            [ receiver ++ " owes " ++ payer ++ " " ++ amount ++ "." |> text ]
-                                    )
+                                    |> List.sort
+                                    |> List.map
+                                        (\( payer, receiver, amount ) ->
+                                            Html.li []
+                                                [ payer ++ " has expended " ++ amount ++ " for " ++ receiver ++ "." |> text ]
+                                        )
 
-                        else
-                            computed.expenses
-                                |> Dict.toFlatList
-                                |> List.map
-                                    (\( payer, receiver, amount ) ->
-                                        ( Members.lookupName payer computed.members
-                                        , Members.lookupName receiver computed.members
-                                        , amount |> Round.round 2
+                            SummaryPerspectiveDebt ->
+                                computed.debts
+                                    |> Dict.toFlatList
+                                    |> List.map
+                                        (\( receiver, payer, amount ) ->
+                                            ( Members.lookupName receiver members
+                                            , Members.lookupName payer members
+                                            , amount |> Round.round 2
+                                            )
                                         )
-                                    )
-                                |> List.sort
-                                |> List.map
-                                    (\( payer, receiver, amount ) ->
-                                        Html.li []
-                                            [ payer ++ " has expended " ++ amount ++ " for " ++ receiver ++ "." |> text ]
-                                    )
+                                    |> List.sort
+                                    |> List.map
+                                        (\( receiver, payer, amount ) ->
+                                            Html.li []
+                                                [ receiver ++ " owes " ++ payer ++ " " ++ amount ++ "." |> text ]
+                                        )
                     ]
         ]
 
@@ -209,8 +237,8 @@ invert =
 update : Model -> Msg -> ( Model, Cmd Msg )
 update model msg =
     case msg of
-        SetInvert value ->
-            ( { model | viewInverted = value }, Cmd.none )
+        SetSummaryPerspective value ->
+            ( { model | summaryPerspective = value }, Cmd.none )
 
         Recompute memberList expenseList ->
             let
