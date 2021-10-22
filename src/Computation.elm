@@ -1,12 +1,12 @@
 module Computation exposing (..)
 
 import Dict exposing (Dict)
-import Expenses exposing (Expense)
+import Expense exposing (Expense)
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
 import Layout exposing (..)
-import Members exposing (Member)
+import Participant exposing (Participant)
 import Round
 import Util.Dict as Dict
 
@@ -25,7 +25,7 @@ init =
 
 
 type alias ComputedModel =
-    { members : Dict Int String
+    { participants : Dict Int String
     , expenses : Expenses
     , debts : Expenses
     , balance : Dict Int Float
@@ -39,19 +39,19 @@ type SummaryPerspective
 
 type Msg
     = SetSummaryPerspective SummaryPerspective
-    | Recompute (List Member) (List Expense)
+    | Recompute (List Participant) (List Expense)
 
 
 view : Dict Int String -> Model -> Html Msg
-view members model =
+view participants model =
     row
-        [ viewSummary members model
-        , viewBalance members model
+        [ viewSummary participants model
+        , viewBalance participants model
         ]
 
 
 viewSummary : Dict Int String -> Model -> Html Msg
-viewSummary members model =
+viewSummary participants model =
     div []
         [ Html.h1 [] [ text "Summary" ]
         , Html.p []
@@ -60,7 +60,7 @@ viewSummary members model =
                     [ Html.Attributes.class "form-check-input"
                     , Html.Attributes.id "computation-summary-outlay"
                     , Html.Attributes.type_ "radio"
-                    , model.summaryPerspective == SummaryPerspectiveOutlays |> Html.Attributes.checked 
+                    , model.summaryPerspective == SummaryPerspectiveOutlays |> Html.Attributes.checked
                     , Html.Events.onCheck (\_ -> SetSummaryPerspective SummaryPerspectiveOutlays)
                     ]
                     []
@@ -75,7 +75,7 @@ viewSummary members model =
                     [ Html.Attributes.class "form-check-input"
                     , Html.Attributes.id "computation-summary-debt"
                     , Html.Attributes.type_ "radio"
-                    , model.summaryPerspective == SummaryPerspectiveDebt |> Html.Attributes.checked 
+                    , model.summaryPerspective == SummaryPerspectiveDebt |> Html.Attributes.checked
                     , Html.Events.onCheck (\_ -> SetSummaryPerspective SummaryPerspectiveDebt)
                     ]
                     []
@@ -99,8 +99,8 @@ viewSummary members model =
                                     |> Dict.toFlatList
                                     |> List.map
                                         (\( payer, receiver, amount ) ->
-                                            ( Members.lookupName payer computed.members
-                                            , Members.lookupName receiver computed.members
+                                            ( Participant.lookupName payer computed.participants
+                                            , Participant.lookupName receiver computed.participants
                                             , amount |> Round.round 2
                                             )
                                         )
@@ -116,8 +116,8 @@ viewSummary members model =
                                     |> Dict.toFlatList
                                     |> List.map
                                         (\( receiver, payer, amount ) ->
-                                            ( Members.lookupName receiver members
-                                            , Members.lookupName payer members
+                                            ( Participant.lookupName receiver participants
+                                            , Participant.lookupName payer participants
                                             , amount |> Round.round 2
                                             )
                                         )
@@ -132,7 +132,7 @@ viewSummary members model =
 
 
 viewBalance : Dict Int String -> Model -> Html Msg
-viewBalance members model =
+viewBalance participants model =
     div [] <|
         [ Html.h1 [] [ text "Balances" ]
         , Html.p []
@@ -145,8 +145,8 @@ viewBalance members model =
                         computed.balance
                             |> Dict.toList
                             |> List.map
-                                (\( memberId, amount ) ->
-                                    ( Members.lookupName memberId members
+                                (\( participantId, amount ) ->
+                                    ( Participant.lookupName participantId participants
                                     , amount
                                         |> Round.round 2
                                         |> (\string ->
@@ -160,8 +160,8 @@ viewBalance members model =
                                 )
                             |> List.sort
                             |> List.map
-                                (\( member, amount ) ->
-                                    Html.li [] [ member ++ ": " ++ amount |> text ]
+                                (\( participant, amount ) ->
+                                    Html.li [] [ participant ++ ": " ++ amount |> text ]
                                 )
                 )
             ]
@@ -240,7 +240,7 @@ update model msg =
         SetSummaryPerspective value ->
             ( { model | summaryPerspective = value }, Cmd.none )
 
-        Recompute memberList expenseList ->
+        Recompute participantList expenseList ->
             let
                 expenses =
                     expensesFromList expenseList
@@ -249,16 +249,16 @@ update model msg =
                     invert expenses
 
                 balance =
-                    memberList
+                    participantList
                         |> List.map .id
                         |> List.foldl
-                            (\member ->
-                                Dict.insert member (Dict.valueSum member expenses - Dict.valueSum member debts)
+                            (\participant ->
+                                Dict.insert participant (Dict.valueSum participant expenses - Dict.valueSum participant debts)
                             )
                             Dict.empty
 
-                members =
-                    List.foldl (\member -> Dict.insert member.id member.name) Dict.empty memberList
+                participants =
+                    List.foldl (\participant -> Dict.insert participant.id participant.name) Dict.empty participantList
             in
             ( { model
                 | computed =
@@ -266,7 +266,7 @@ update model msg =
                         { expenses = expenses
                         , debts = debts
                         , balance = balance
-                        , members = members
+                        , participants = participants
                         }
               }
             , Cmd.none

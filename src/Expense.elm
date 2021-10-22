@@ -1,4 +1,4 @@
-module Expenses exposing (..)
+module Expense exposing (..)
 
 import Dict exposing (Dict)
 import Html exposing (Html)
@@ -6,7 +6,7 @@ import Html.Attributes exposing (class)
 import Html.Events
 import Layout exposing (..)
 import Maybe.Extra as Maybe
-import Members exposing (Member)
+import Participant exposing (Participant)
 import Round
 import Set exposing (Set)
 import Util.Dict as Dict
@@ -42,7 +42,7 @@ type alias CreateModel =
 type alias Expense =
     { payer : Int
     , amount : Float
-    , receivers : Dict Int Float -- map from member ID to fractional part
+    , receivers : Dict Int Float -- map from participant ID to fractional part
     }
 
 
@@ -103,8 +103,8 @@ createModalId =
     "add-expense"
 
 
-view : Members.Model -> Model -> Html Msg
-view members model =
+view : Participant.Model -> Model -> Html Msg
+view participantModel model =
     row1 <|
         Html.form [ Html.Events.onSubmit CreateSubmit ] <|
             [ openModalButton createModalId "Add" LoadCreate
@@ -115,30 +115,30 @@ view members model =
                             ( [ Html.text "Loading..." ], True )
 
                         Just createModel ->
-                            ( viewAdd members createModel
+                            ( viewAdd participantModel createModel
                             , String.isEmpty createModel.amount.value
                                 || Maybe.isJust createModel.amount.validationError
                             )
               in
               modal createModalId "Add expense" body disable
             ]
-                ++ viewExpenses members model.expenses
+                ++ viewExpenses participantModel model.expenses
 
 
-viewAdd : Members.Model -> CreateModel -> List (Html Msg)
-viewAdd members model =
+viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
+viewAdd participantModel model =
     let
-        membersFields =
-            List.map Members.toField members.members
+        participantsFields =
+            List.map Participant.toField participantModel.participants
     in
-    [ optionsInput "new-expense-payer" "Payer" membersFields model.payerId CreateEditPayer
+    [ optionsInput "new-expense-payer" "Payer" participantsFields model.payerId CreateEditPayer
     , textInput "Amount" model.amount CreateEditAmount
-    , checkboxesInput "Receivers" membersFields (model.receivers |> Dict.keys |> Set.fromList) CreateEditReceiver
+    , checkboxesInput "Receivers" participantsFields (model.receivers |> Dict.keys |> Set.fromList) CreateEditReceiver
     ]
 
 
-viewExpenses : Members.Model -> List Expense -> List (Html Msg)
-viewExpenses membersModel expenseModels =
+viewExpenses : Participant.Model -> List Expense -> List (Html Msg)
+viewExpenses participantModel expenseModels =
     [ Html.table [ class "table" ]
         [ Html.thead []
             [ Html.tr [] <|
@@ -147,26 +147,26 @@ viewExpenses membersModel expenseModels =
                 ]
                     ++ List.map
                         (.name >> Html.text >> List.singleton >> Html.th [ Html.Attributes.scope "col" ])
-                        membersModel.members
+                        participantModel.participants
             ]
         , Html.tbody [] <|
             List.map
                 (\expense ->
                     Html.tr []
-                        ([ Html.td [] [ Members.lookupName expense.payer membersModel.names |> Html.text ]
+                        ([ Html.td [] [ Participant.lookupName expense.payer participantModel.names |> Html.text ]
                          , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
                          ]
                             ++ List.map
-                                (\member ->
+                                (\participant ->
                                     Html.td []
-                                        (if Dict.member member.id expense.receivers then
+                                        (if Dict.member participant.id expense.receivers then
                                             [ Html.text "✓" ]
 
                                          else
                                             []
                                         )
                                 )
-                                membersModel.members
+                                participantModel.participants
                         )
                 )
                 expenseModels
@@ -179,19 +179,19 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : List Member -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update members msg model =
+update : List Participant -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update participants msg model =
     case msg of
         LoadCreate ->
             ( ( { model
                     | create =
-                        members
+                        participants
                             |> List.head
                             |> Maybe.map
-                                (\firstMember ->
+                                (\firstParticipant ->
                                     initCreate
-                                        (firstMember.id |> String.fromInt)
-                                        (members |> List.map (.id >> String.fromInt) |> List.map (\key -> ( key, 1.0 )) |> Dict.fromList)
+                                        (firstParticipant.id |> String.fromInt)
+                                        (participants |> List.map (.id >> String.fromInt) |> List.map (\key -> ( key, 1.0 )) |> Dict.fromList)
                                 )
                 }
               , False

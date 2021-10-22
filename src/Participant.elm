@@ -1,4 +1,4 @@
-module Members exposing (..)
+module Participant exposing (..)
 
 import Dict exposing (Dict)
 import Html exposing (Html, div, text)
@@ -7,16 +7,16 @@ import Html.Events exposing (onInput, onSubmit)
 import Layout exposing (..)
 
 
-type alias Member =
+type alias Participant =
     { id : Int
     , name : String
     }
 
 
-toField : Member -> Field
-toField member =
-    { key = String.fromInt member.id
-    , value = member.name
+toField : Participant -> Field
+toField participant =
+    { key = String.fromInt participant.id
+    , value = participant.name
     }
 
 
@@ -28,9 +28,9 @@ lookupName id =
 
 type alias Model =
     { create : CreateModel
-    , members : List Member
+    , participants : List Participant
     , names : Dict Int String
-    , nextMemberId : Int
+    , nextId : Int
     }
 
 
@@ -42,9 +42,9 @@ type alias CreateModel =
 init : Model
 init =
     { create = initCreate
-    , members = []
+    , participants = []
     , names = Dict.empty
-    , nextMemberId = 1
+    , nextId = 1
     }
 
 
@@ -61,13 +61,13 @@ type Msg
 
 createId : String
 createId =
-    "member-create-input"
+    "participant-create-input"
 
 
 view : Model -> Html Msg
 view model =
     row
-        [ model.members |> List.map .name |> (row1 << col << List.map (row1 << col1 << text))
+        [ model.participants |> List.map .name |> (row1 << col << List.map (row1 << col1 << text))
         , model.create |> (row1 << col1 << viewCreate)
         ]
 
@@ -111,30 +111,30 @@ update msg model =
                 "" ->
                     let
                         _ =
-                            Debug.log "error" "cannot create member with empty name"
+                            Debug.log "error" "cannot create participant with empty name"
                     in
                     ( model, Cmd.none )
 
                 rawName ->
                     let
                         id =
-                            model.nextMemberId
+                            model.nextId
 
                         name =
                             rawName |> cleanName
 
-                        newNextMemberId =
-                            model.nextMemberId + 1
+                        newNextId =
+                            model.nextId + 1
                     in
                     ( { model
-                        | members =
-                            model.members
+                        | participants =
+                            model.participants
                                 ++ [ { id = id, name = name } ]
-                                -- Keep the member list sorted by name.
+                                -- Keep the participant list sorted by name.
                                 |> List.sortBy (.name >> String.toLower)
                         , names = model.names |> Dict.insert id name
                         , create = initCreate
-                        , nextMemberId = newNextMemberId
+                        , nextId = newNextId
                       }
                     , Cmd.none
                     )
