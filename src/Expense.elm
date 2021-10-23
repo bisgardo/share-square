@@ -130,12 +130,25 @@ view model =
     row <|
         [ Html.table [ class "table" ]
             [ Html.thead []
-                -- Use keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
-                [ Html.Keyed.node "tr" [] <|
-                    [ ( "id", Html.th [] [ Html.text "#" ] )
-                    , ( "payer", Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ] )
-                    , ( "amount", Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ] )
-                    , ( "description", Html.th [ Html.Attributes.scope "col" ] [ Html.text "Description" ] )
+                [ Html.tr [] <|
+                    [ Html.th [] [ Html.text "#" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Description" ]
+                    , Html.th
+                        [ Html.Attributes.scope "col"
+                        , Html.Attributes.colspan (model.participant.participants |> List.length |> max 1)
+                        ]
+                        [ Html.text "Participants" ]
+                    , Html.td [] []
+                    ]
+
+                -- Using keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
+                , Html.Keyed.node "tr" [] <|
+                    [ ( "id", Html.td [] [] )
+                    , ( "payer", Html.td [] [] )
+                    , ( "amount", Html.td [] [] )
+                    , ( "description", Html.td [] [] )
                     ]
                         ++ (model.participant.participants
                                 |> List.map
@@ -144,17 +157,18 @@ view model =
                                             name =
                                                 participant.name
                                         in
-                                        ( name
-                                        , name
-                                            |> Html.text
-                                            |> List.singleton
-                                            |> Html.th [ Html.Attributes.scope "col" ]
-                                        )
+                                        ( name, name |> Html.text |> List.singleton |> Html.td [] )
                                     )
+                                |> (\htmls ->
+                                        -- Ensure that there is at least 1 cell.
+                                        if List.isEmpty htmls then
+                                            [ ( "empty", Html.td [] [] ) ]
+
+                                        else
+                                            htmls
+                                   )
                            )
-                        ++ [ ( Participant.createModalId
-                             , Html.td [ Html.Attributes.align "right" ] [ Participant.viewCreateOpen |> Html.map ParticipantMsg ]
-                             )
+                        ++ [ ( "participant-create", Html.td [ Html.Attributes.align "right" ] [ Participant.viewCreateOpen |> Html.map ParticipantMsg ] )
                            ]
                 ]
             , Html.Keyed.node "tbody" [] <|

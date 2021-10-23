@@ -6,7 +6,7 @@ import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
 import Layout exposing (..)
-import Participant exposing (Participant)
+import Participant exposing (lookupName)
 import Round
 import Util.Dict as Dict
 
@@ -25,8 +25,7 @@ init =
 
 
 type alias ComputedModel =
-    { participants : Dict Int String
-    , expenses : Expenses
+    { expenses : Expenses
     , debts : Expenses
     , balance : Dict Int Float
     }
@@ -39,7 +38,7 @@ type SummaryPerspective
 
 type Msg
     = SetSummaryPerspective SummaryPerspective
-    | Recompute (List Participant) (List Expense)
+    | Recompute (List Int) (List Expense)
 
 
 view : Dict Int String -> Model -> Html Msg
@@ -101,8 +100,8 @@ viewSummary participants model =
                                     |> Dict.toFlatList
                                     |> List.map
                                         (\( payer, receiver, amount ) ->
-                                            ( Participant.lookupName payer computed.participants
-                                            , Participant.lookupName receiver computed.participants
+                                            ( lookupName payer participants
+                                            , lookupName receiver participants
                                             , amount |> Round.round 2
                                             )
                                         )
@@ -118,8 +117,8 @@ viewSummary participants model =
                                     |> Dict.toFlatList
                                     |> List.map
                                         (\( receiver, payer, amount ) ->
-                                            ( Participant.lookupName receiver participants
-                                            , Participant.lookupName payer participants
+                                            ( lookupName receiver participants
+                                            , lookupName payer participants
                                             , amount |> Round.round 2
                                             )
                                         )
@@ -148,7 +147,7 @@ viewBalance participants model =
                             |> Dict.toList
                             |> List.map
                                 (\( participantId, amount ) ->
-                                    ( Participant.lookupName participantId participants
+                                    ( lookupName participantId participants
                                     , amount
                                         |> Round.round 2
                                         |> (\string ->
@@ -242,7 +241,7 @@ update model msg =
         SetSummaryPerspective value ->
             ( { model | summaryPerspective = value }, Cmd.none )
 
-        Recompute participantList expenseList ->
+        Recompute participantIds expenseList ->
             let
                 expenses =
                     expensesFromList expenseList
@@ -251,16 +250,12 @@ update model msg =
                     invert expenses
 
                 balance =
-                    participantList
-                        |> List.map .id
+                    participantIds
                         |> List.foldl
                             (\participant ->
                                 Dict.insert participant (Dict.valueSum participant expenses - Dict.valueSum participant debts)
                             )
                             Dict.empty
-
-                participants =
-                    List.foldl (\participant -> Dict.insert participant.id participant.name) Dict.empty participantList
             in
             ( { model
                 | computed =
@@ -268,7 +263,6 @@ update model msg =
                         { expenses = expenses
                         , debts = debts
                         , balance = balance
-                        , participants = participants
                         }
               }
             , Cmd.none

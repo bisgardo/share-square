@@ -100,7 +100,7 @@ update msg model =
 
                 ( newComputationModel, newComputationCmd ) =
                     if recompute then
-                        Computation.Recompute model.expense.participant.participants newExpenseModel.expenses
+                        Computation.Recompute (model.expense.participant.participants |> List.map .id) newExpenseModel.expenses
                             |> Computation.update model.computation
 
                     else
