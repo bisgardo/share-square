@@ -2,7 +2,7 @@ port module Layout exposing (..)
 
 import Html exposing (Html, button, div, h5, text)
 import Html.Attributes exposing (class, disabled, tabindex, type_)
-import Html.Events exposing (onCheck, onClick, onInput)
+import Html.Events exposing (onCheck, onInput)
 import Maybe.Extra
 import Set exposing (Set)
 
@@ -74,15 +74,17 @@ modal key title body disableSubmit =
         ]
 
 
-openModalButton : String -> String -> msg -> Html msg
-openModalButton key label loadMsg =
+openModalButton : String -> String -> String -> List (Html.Attribute msg) -> Html msg
+openModalButton id key label attributes =
     button
-        [ type_ "button"
-        , class "btn btn-primary"
-        , data "bs-toggle" "modal"
-        , data "bs-target" ("#" ++ key)
-        , onClick loadMsg
-        ]
+        ([ Html.Attributes.id id
+         , type_ "button"
+         , class "btn btn-primary"
+         , data "bs-toggle" "modal"
+         , data "bs-target" ("#" ++ key)
+         ]
+            ++ attributes
+        )
         [ text label ]
 
 

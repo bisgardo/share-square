@@ -3,7 +3,7 @@
 // Import CSS directly into 'app.js'.
 // It will be imported into the HTML from there (presumably through the webpack CSS plugins).
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { Modal } from 'bootstrap';
+import { Modal, Tooltip } from 'bootstrap';
 
 // Import all the Elm code.
 import { Elm } from './Main.elm';
@@ -27,3 +27,7 @@ app.ports.closeModal.subscribe(id => {
 	const element = document.getElementById(id);
     Modal.getInstance(element).hide();
 });
+
+// Enable tooltips.
+[].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    .forEach(element => new Tooltip(element));

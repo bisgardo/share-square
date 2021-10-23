@@ -1,10 +1,11 @@
 module Participant exposing (..)
 
 import Dict exposing (Dict)
-import Html exposing (Html, div, text)
-import Html.Attributes exposing (class, id, value)
-import Html.Events exposing (onInput, onSubmit)
+import Html exposing (Html, text)
+import Html.Attributes
+import Html.Events exposing (onSubmit)
 import Layout exposing (..)
+import Util.Update as Update
 
 
 type alias Participant =
@@ -27,7 +28,7 @@ lookupName id =
 
 
 type alias Model =
-    { create : CreateModel
+    { create : Maybe CreateModel
     , participants : List Participant
     , names : Dict Int String
     , nextId : Int
@@ -35,13 +36,13 @@ type alias Model =
 
 
 type alias CreateModel =
-    { name : String
+    { name : Validated Field
     }
 
 
 init : Model
 init =
-    { create = initCreate
+    { create = Nothing
     , participants = []
     , names = Dict.empty
     , nextId = 1
@@ -50,94 +51,141 @@ init =
 
 initCreate : CreateModel
 initCreate =
-    { name = ""
+    { name =
+        { key = "new-participant-name"
+        , value = ""
+        , validationError = Nothing
+        }
     }
 
 
 type Msg
-    = CreateUpdate String
+    = LoadCreate
+    | CreateUpdate String
     | CreateSubmit
+    | CloseModal
 
 
 createId : String
 createId =
-    "participant-create-input"
+    "participant-create-open"
 
 
-view : Model -> Html Msg
-view model =
-    row
-        [ model.participants |> List.map .name |> (row1 << col << List.map (row1 << col1 << text))
-        , model.create |> (row1 << col1 << viewCreate)
+createModalId : String
+createModalId =
+    "participant-create"
+
+
+viewCreateOpen : Html Msg
+viewCreateOpen =
+    -- Wrapping button in span because the same element
+    -- cannot be used to toggle both tooltip and modal.
+    Html.span
+        [ data "bs-toggle" "tooltip"
+        , data "bs-placement" "left"
+        , Html.Attributes.title "Add participant"
+        ]
+        [ openModalButton
+            createId
+            createModalId
+            "+"
+            [ Html.Events.onClick LoadCreate
+            , Html.Attributes.class "btn-sm"
+            ]
         ]
 
 
-viewCreate : CreateModel -> Html Msg
-viewCreate model =
+viewCreateModal : Model -> Html Msg
+viewCreateModal model =
+    let
+        ( body, disable ) =
+            case model.create of
+                Nothing ->
+                    ( [ text "Loading..." ], True )
+
+                Just createModel ->
+                    ( [ textInput "Name" createModel.name CreateUpdate ]
+                    , createModel.name.value |> String.trim |> String.isEmpty
+                    )
+    in
     Html.form
         [ onSubmit CreateSubmit
         ]
-        [ div
-            [ class "input-group"
-            ]
-            [ Html.input
-                [ id createId
-                , class "form-control"
-                , onInput CreateUpdate
-                , value model.name
-                ]
-                []
-            , Html.button
-                [ class "btn btn-primary"
-                , String.isEmpty model.name |> Html.Attributes.disabled
-                ]
-                [ text "Add" ]
-            ]
+        [ modal createModalId "Add participant" body disable
         ]
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        LoadCreate ->
+            ( { model
+                | create =
+                    Just initCreate
+              }
+            , Cmd.none
+            )
+
         CreateUpdate name ->
             ( { model
-                | create = { name = name }
+                | create =
+                    model.create
+                        |> Maybe.map
+                            (\createModel ->
+                                let
+                                    nameField =
+                                        createModel.name
+                                in
+                                { createModel | name = { nameField | value = name } }
+                            )
               }
             , Cmd.none
             )
 
         CreateSubmit ->
-            case model.create.name of
-                "" ->
+            let
+                id =
+                    model.nextId
+
+                participant =
+                    model.create
+                        |> Result.fromMaybe "no create model found"
+                        |> Result.map (.name >> .value >> String.trim)
+                        |> Result.andThen (create id)
+            in
+            case participant of
+                Err error ->
                     let
                         _ =
-                            Debug.log "error" "cannot create participant with empty name"
+                            Debug.log "error" error
                     in
                     ( model, Cmd.none )
 
-                rawName ->
-                    let
-                        id =
-                            model.nextId
-
-                        name =
-                            rawName |> cleanName
-
-                        newNextId =
-                            model.nextId + 1
-                    in
+                Ok value ->
                     ( { model
                         | participants =
                             model.participants
-                                ++ [ { id = id, name = name } ]
-                                -- Keep the participant list sorted by name.
+                                ++ [ value ]
+                                -- Keep the participant list sorted by name (case insensitively).
                                 |> List.sortBy (.name >> String.toLower)
-                        , names = model.names |> Dict.insert id name
-                        , create = initCreate
-                        , nextId = newNextId
+                        , names = model.names |> Dict.insert id value.name
+                        , create = Nothing
+                        , nextId = id + 1
                       }
-                    , Cmd.none
+                    , Update.delegate CloseModal
                     )
+
+        CloseModal ->
+            ( model, closeModal createModalId )
+
+
+create : Int -> String -> Result String Participant
+create id name =
+    if String.isEmpty name then
+        Err "cannot create participant with empty name"
+
+    else
+        Ok { id = id, name = name |> cleanName }
 
 
 cleanName : String -> String

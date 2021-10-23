@@ -4,6 +4,7 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events
+import Html.Keyed as Keyed
 import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
@@ -16,16 +17,18 @@ import Util.Update as Update
 type Msg
     = LoadCreate
     | CreateSubmit
+    | CloseModal
     | CreateEditAmount String
     | CreateEditPayer String
     | CreateEditReceiver String Bool
-    | CloseModal
     | LayoutMsg Layout.Msg
+    | ParticipantMsg Participant.Msg
 
 
 type alias Model =
     { create : Maybe CreateModel
     , expenses : List Expense
+    , participant : Participant.Model
     }
 
 
@@ -37,6 +40,10 @@ type alias CreateModel =
     , payerId : String
     , receivers : Dict String Float
     }
+
+
+
+-- TODO Add comment field.
 
 
 type alias Expense =
@@ -84,6 +91,7 @@ init : Model
 init =
     { create = Nothing
     , expenses = []
+    , participant = Participant.init
     }
 
 
@@ -100,29 +108,86 @@ initCreate initPayerId initReceiverIds =
 
 
 createModalId =
-    "add-expense"
+    "expense-create"
 
 
-view : Participant.Model -> Model -> Html Msg
-view participantModel model =
-    row1 <|
-        Html.form [ Html.Events.onSubmit CreateSubmit ] <|
-            [ openModalButton createModalId "Add" LoadCreate
-            , let
-                ( body, disable ) =
-                    case model.create of
-                        Nothing ->
-                            ( [ Html.text "Loading..." ], True )
+view : Model -> Html Msg
+view model =
+    row <|
+        [ Html.table [ class "table" ]
+            [ Html.thead []
+                [ Html.tr [] <|
+                    [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
+                    ]
+                        ++ (model.participant.participants
+                                |> List.map
+                                    (.name >> Html.text >> List.singleton >> Html.th [ Html.Attributes.scope "col" ])
+                           )
+                        ++ [ Keyed.node "td"
+                                -- use keyed to keep focus on the button
+                                [ Html.Attributes.align "right" ]
+                                [ ( Participant.createModalId, Participant.viewCreateOpen |> Html.map ParticipantMsg )
+                                ]
+                           ]
+                ]
+            , Html.tbody [] <|
+                List.map
+                    (\expense ->
+                        Html.tr []
+                            ([ Html.td [] [ Participant.lookupName expense.payer model.participant.names |> Html.text ]
+                             , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
+                             ]
+                                ++ List.map
+                                    (\participant ->
+                                        Html.td []
+                                            (if Dict.member participant.id expense.receivers then
+                                                [ Html.text "✓" ]
 
-                        Just createModel ->
-                            ( viewAdd participantModel createModel
-                            , String.isEmpty createModel.amount.value
-                                || Maybe.isJust createModel.amount.validationError
+                                             else
+                                                []
+                                            )
+                                    )
+                                    model.participant.participants
                             )
-              in
-              modal createModalId "Add expense" body disable
+                    )
+                    model.expenses
             ]
-                ++ viewExpenses participantModel model.expenses
+        , viewCreateOpen model
+        , Participant.viewCreateModal model.participant |> Html.map ParticipantMsg
+        , viewCreateModal model
+        ]
+
+
+viewCreateOpen : Model -> Html Msg
+viewCreateOpen model =
+    openModalButton
+        Participant.createId
+        createModalId
+        "Add"
+        [ List.isEmpty model.participant.participants
+            |> Html.Attributes.disabled
+        , Html.Events.onClick LoadCreate
+        ]
+
+
+viewCreateModal : Model -> Html Msg
+viewCreateModal model =
+    let
+        ( body, disable ) =
+            case model.create of
+                Nothing ->
+                    ( [ Html.text "Loading..." ], True )
+
+                Just createModel ->
+                    ( viewAdd model.participant createModel
+                    , String.isEmpty createModel.amount.value
+                        || Maybe.isJust createModel.amount.validationError
+                    )
+    in
+    Html.form
+        [ Html.Events.onSubmit CreateSubmit ]
+        [ modal createModalId "Add expense" body disable ]
 
 
 viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
@@ -137,61 +202,24 @@ viewAdd participantModel model =
     ]
 
 
-viewExpenses : Participant.Model -> List Expense -> List (Html Msg)
-viewExpenses participantModel expenseModels =
-    [ Html.table [ class "table" ]
-        [ Html.thead []
-            [ Html.tr [] <|
-                [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
-                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
-                ]
-                    ++ List.map
-                        (.name >> Html.text >> List.singleton >> Html.th [ Html.Attributes.scope "col" ])
-                        participantModel.participants
-            ]
-        , Html.tbody [] <|
-            List.map
-                (\expense ->
-                    Html.tr []
-                        ([ Html.td [] [ Participant.lookupName expense.payer participantModel.names |> Html.text ]
-                         , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
-                         ]
-                            ++ List.map
-                                (\participant ->
-                                    Html.td []
-                                        (if Dict.member participant.id expense.receivers then
-                                            [ Html.text "✓" ]
-
-                                         else
-                                            []
-                                        )
-                                )
-                                participantModel.participants
-                        )
-                )
-                expenseModels
-        ]
-    ]
-
-
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : List Participant -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update participants msg model =
+update : Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update msg model =
     case msg of
         LoadCreate ->
             ( ( { model
                     | create =
-                        participants
+                        model.participant.participants
                             |> List.head
                             |> Maybe.map
                                 (\firstParticipant ->
                                     initCreate
                                         (firstParticipant.id |> String.fromInt)
-                                        (participants |> List.map (.id >> String.fromInt) |> List.map (\key -> ( key, 1.0 )) |> Dict.fromList)
+                                        (model.participant.participants |> List.map (.id >> String.fromInt) |> List.map (\key -> ( key, 1.0 )) |> Dict.fromList)
                                 )
                 }
               , False
@@ -291,6 +319,15 @@ update participants msg model =
 
                     else
                         ( ( model, False ), Cmd.none )
+
+        ParticipantMsg participantMsg ->
+            let
+                ( newParticipantModel, newParticipantCmd ) =
+                    Participant.update participantMsg model.participant
+            in
+            ( ( { model | participant = newParticipantModel }, False )
+            , Cmd.map ParticipantMsg newParticipantCmd
+            )
 
 
 validateAmount : String -> Maybe String
