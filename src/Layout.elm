@@ -112,8 +112,8 @@ type alias Validated a =
 optionsInput : String -> String -> List Field -> String -> (String -> msg) -> Html msg
 optionsInput key label options value tagger =
     div [ rowClass, class "row mb-3" ]
-        [ Html.label [ class "col-sm-2 col-form-label", Html.Attributes.for key ] [ text label ]
-        , div [ class "col-sm-10" ]
+        [ Html.label [ class "col-sm-3 col-form-label", Html.Attributes.for key ] [ text label ]
+        , div [ class "col-sm-9" ]
             [ Html.select
                 [ Html.Attributes.id key, class "form-select", onInput tagger ]
                 (List.map (optionInput value) options)
@@ -142,8 +142,8 @@ optionSelected condition =
 textInput : String -> Validated Field -> (String -> msg) -> Html msg
 textInput label field tagger =
     div [ class "row mb-3" ] <|
-        [ Html.label [ class "col-sm-2 col-form-label", Html.Attributes.for field.key ] [ text label ]
-        , div [ class "col-sm-10" ] <|
+        [ Html.label [ class "col-sm-3 col-form-label", Html.Attributes.for field.key ] [ text label ]
+        , div [ class "col-sm-9" ] <|
             [ Html.input
                 ([ Html.Attributes.id field.key
                  , type_ "text"
@@ -166,8 +166,8 @@ textInput label field tagger =
 checkboxesInput : String -> List Field -> Set String -> (String -> Bool -> msg) -> Html msg
 checkboxesInput label fields checkedKeys tagger =
     Html.fieldset [ class "row mb-3" ]
-        [ Html.legend [ class "col-form-label col-sm-2 pt-0" ] [ text label ]
-        , div [ class "col-sm-10" ] <|
+        [ Html.legend [ class "col-form-label col-sm-3 pt-0" ] [ text label ]
+        , div [ class "col-sm-9" ] <|
             List.map
                 (\field ->
                     div [ class "form-check" ]

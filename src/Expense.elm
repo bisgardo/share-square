@@ -26,10 +26,10 @@ type Msg
     = LoadCreate
     | CreateSubmit
     | CloseModal
-    | CreateEditAmount String
     | CreateEditPayer String
-    | CreateEditReceiver String Bool
+    | CreateEditAmount String
     | CreateEditDescription String
+    | CreateEditReceiver String Bool
     | LayoutMsg Layout.Msg
     | ParticipantMsg Participant.Msg
 
@@ -46,10 +46,10 @@ type alias Model =
 The strings in this type are really ints but keeping them as strings saves conversions to/from HTML.
 -}
 type alias CreateModel =
-    { amount : Validated Field
-    , payerId : String
-    , receivers : Dict String Float
+    { payerId : String
+    , amount : Validated Field
     , description : Validated Field
+    , receivers : Dict String Float
     }
 
 
@@ -57,8 +57,8 @@ type alias Expense =
     { id : String
     , payer : Int
     , amount : Float
-    , receivers : Dict Int Float -- map from participant ID to fractional part
     , description : String
+    , receivers : Dict Int Float -- map from participant ID to fractional part
     }
 
 
@@ -90,8 +90,8 @@ create id model =
             { id = id |> String.fromInt
             , payer = payerId
             , amount = amount
-            , receivers = receivers
             , description = model.description.value
+            , receivers = receivers
             }
         )
         payerResult
@@ -104,7 +104,7 @@ init =
     { create = Nothing
     , expenses = []
     , participant = Participant.init
-    , nextExpenseId = 0
+    , nextExpenseId = 1
     }
 
 
@@ -116,12 +116,12 @@ initCreate initPayerId initReceiverIds =
         , value = ""
         , validationError = Nothing
         }
-    , receivers = initReceiverIds
     , description =
         { key = "expense-create-description"
         , value = ""
         , validationError = Nothing
         }
+    , receivers = initReceiverIds
     }
 
 
@@ -132,8 +132,10 @@ view model =
             [ Html.thead []
                 -- Use keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
                 [ Html.Keyed.node "tr" [] <|
-                    [ ( "payer", Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ] )
+                    [ ( "id", Html.th [] [ Html.text "#" ] )
+                    , ( "payer", Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ] )
                     , ( "amount", Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ] )
+                    , ( "description", Html.th [ Html.Attributes.scope "col" ] [ Html.text "Description" ] )
                     ]
                         ++ (model.participant.participants
                                 |> List.map
@@ -151,12 +153,7 @@ view model =
                                     )
                            )
                         ++ [ ( Participant.createModalId
-                               -- TODO Figure out how to align properly.
-                             , Html.th
-                                []
-                                [ Html.div [ Html.Attributes.style "overflow" "auto" ] [ Html.div [ class "float-end" ] [ Participant.viewCreateOpen |> Html.map ParticipantMsg ] ]
-                                , Html.div [] [ Html.text "Description" ]
-                                ]
+                             , Html.td [ Html.Attributes.align "right" ] [ Participant.viewCreateOpen |> Html.map ParticipantMsg ]
                              )
                            ]
                 ]
@@ -166,8 +163,10 @@ view model =
                         (\expense ->
                             ( expense.id
                             , Html.tr []
-                                ([ Html.td [] [ Participant.lookupName expense.payer model.participant.names |> Html.text ]
+                                ([ Html.td [] [ Html.text expense.id ]
+                                 , Html.td [] [ Participant.lookupName expense.payer model.participant.names |> Html.text ]
                                  , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
+                                 , Html.td [] [ expense.description |> Html.text ]
                                  ]
                                     ++ List.map
                                         (\participant ->
@@ -180,7 +179,7 @@ view model =
                                                 )
                                         )
                                         model.participant.participants
-                                    ++ [ Html.td [] [ expense.description |> Html.text ] ]
+                                    ++ [ Html.td [] [] ]
                                 )
                             )
                         )
@@ -197,7 +196,7 @@ viewCreateOpen model =
     openModalButton
         Participant.createId
         createModalId
-        "Add"
+        "Add expense"
         [ List.isEmpty model.participant.participants
             |> Html.Attributes.disabled
         , Html.Events.onClick LoadCreate
@@ -232,8 +231,8 @@ viewAdd participantModel model =
     in
     [ optionsInput "new-expense-payer" "Payer" participantsFields model.payerId CreateEditPayer
     , textInput "Amount" model.amount CreateEditAmount
-    , checkboxesInput "Receivers" participantsFields (model.receivers |> Dict.keys |> Set.fromList) CreateEditReceiver
     , textInput "Description" model.description CreateEditDescription
+    , checkboxesInput "Receivers" participantsFields (model.receivers |> Dict.keys |> Set.fromList) CreateEditReceiver
     ]
 
 
@@ -298,6 +297,17 @@ update msg model =
         CloseModal ->
             ( ( model, False ), closeModal createModalId )
 
+        CreateEditPayer payer ->
+            ( ( { model
+                    | create =
+                        model.create
+                            |> Maybe.map (\createModel -> { createModel | payerId = payer })
+                }
+              , False
+              )
+            , Cmd.none
+            )
+
         CreateEditAmount amount ->
             ( ( { model
                     | create =
@@ -322,11 +332,24 @@ update msg model =
             , Cmd.none
             )
 
-        CreateEditPayer payer ->
+        CreateEditDescription description ->
             ( ( { model
                     | create =
                         model.create
-                            |> Maybe.map (\createModel -> { createModel | payerId = payer })
+                            |> Maybe.map
+                                (\createModel ->
+                                    let
+                                        descriptionField =
+                                            createModel.description
+                                    in
+                                    { createModel
+                                        | description =
+                                            { descriptionField
+                                                | value = description
+                                                , validationError = validateDescription description
+                                            }
+                                    }
+                                )
                 }
               , False
               )
@@ -346,30 +369,6 @@ update msg model =
 
                                             else
                                                 Dict.remove receiverKey createModel.receivers
-                                    }
-                                )
-                }
-              , False
-              )
-            , Cmd.none
-            )
-
-        CreateEditDescription description ->
-            ( ( { model
-                    | create =
-                        model.create
-                            |> Maybe.map
-                                (\createModel ->
-                                    let
-                                        descriptionField =
-                                            createModel.description
-                                    in
-                                    { createModel
-                                        | description =
-                                            { descriptionField
-                                                | value = description
-                                                , validationError = validateDescription description
-                                            }
                                     }
                                 )
                 }
