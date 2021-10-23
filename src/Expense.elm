@@ -4,7 +4,7 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events
-import Html.Keyed as Keyed
+import Html.Keyed
 import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
@@ -29,6 +29,7 @@ type alias Model =
     { create : Maybe CreateModel
     , expenses : List Expense
     , participant : Participant.Model
+    , nextExpenseId : Int
     }
 
 
@@ -47,14 +48,15 @@ type alias CreateModel =
 
 
 type alias Expense =
-    { payer : Int
+    { id : String
+    , payer : Int
     , amount : Float
     , receivers : Dict Int Float -- map from participant ID to fractional part
     }
 
 
-create : CreateModel -> Result String Expense
-create model =
+create : Int -> CreateModel -> Result String Expense
+create id model =
     let
         payerResult =
             model.payerId
@@ -77,7 +79,8 @@ create model =
     in
     Result.map3
         (\payerId amount receivers ->
-            { payer = payerId
+            { id = id |> String.fromInt
+            , payer = payerId
             , amount = amount
             , receivers = receivers
             }
@@ -92,6 +95,7 @@ init =
     { create = Nothing
     , expenses = []
     , participant = Participant.init
+    , nextExpenseId = 0
     }
 
 
@@ -116,42 +120,53 @@ view model =
     row <|
         [ Html.table [ class "table" ]
             [ Html.thead []
-                [ Html.tr [] <|
-                    [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
-                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
+                -- Use keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
+                [ Html.Keyed.node "tr" [] <|
+                    [ ( "payer", Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ] )
+                    , ( "amount", Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ] )
                     ]
                         ++ (model.participant.participants
                                 |> List.map
-                                    (.name >> Html.text >> List.singleton >> Html.th [ Html.Attributes.scope "col" ])
+                                    (\participant ->
+                                        let
+                                            name =
+                                                participant.name
+                                        in
+                                        ( Debug.log "name" name, name |> Html.text |> List.singleton |> Html.th [ Html.Attributes.scope "col" ] )
+                                    )
                            )
-                        ++ [ Keyed.node "td"
-                                -- use keyed to keep focus on the button
+                        ++ [ ( Participant.createModalId
+                             , Html.td
                                 [ Html.Attributes.align "right" ]
-                                [ ( Participant.createModalId, Participant.viewCreateOpen |> Html.map ParticipantMsg )
+                                [ Participant.viewCreateOpen |> Html.map ParticipantMsg
                                 ]
+                             )
                            ]
                 ]
-            , Html.tbody [] <|
-                List.map
-                    (\expense ->
-                        Html.tr []
-                            ([ Html.td [] [ Participant.lookupName expense.payer model.participant.names |> Html.text ]
-                             , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
-                             ]
-                                ++ List.map
-                                    (\participant ->
-                                        Html.td []
-                                            (if Dict.member participant.id expense.receivers then
-                                                [ Html.text "✓" ]
+            , Html.Keyed.node "tbody" [] <|
+                (model.expenses
+                    |> List.map
+                        (\expense ->
+                            ( expense.id
+                            , Html.tr []
+                                ([ Html.td [] [ Participant.lookupName expense.payer model.participant.names |> Html.text ]
+                                 , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
+                                 ]
+                                    ++ List.map
+                                        (\participant ->
+                                            Html.td []
+                                                (if Dict.member participant.id expense.receivers then
+                                                    [ Html.text "✓" ]
 
-                                             else
-                                                []
-                                            )
-                                    )
-                                    model.participant.participants
+                                                 else
+                                                    []
+                                                )
+                                        )
+                                        model.participant.participants
+                                )
                             )
-                    )
-                    model.expenses
+                        )
+                )
             ]
         , viewCreateOpen model
         , Participant.viewCreateModal model.participant |> Html.map ParticipantMsg
@@ -229,10 +244,13 @@ update msg model =
 
         CreateSubmit ->
             let
+                id =
+                    model.nextExpenseId
+
                 expense =
                     model.create
                         |> Result.fromMaybe "no create model found"
-                        |> Result.andThen create
+                        |> Result.andThen (create id)
             in
             case expense of
                 Err error ->
@@ -246,6 +264,7 @@ update msg model =
                     ( ( { model
                             | expenses =
                                 model.expenses ++ [ value ]
+                            , nextExpenseId = id + 1
                         }
                       , True
                       )
