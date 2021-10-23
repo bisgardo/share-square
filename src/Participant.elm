@@ -5,6 +5,8 @@ import Html exposing (Html, text)
 import Html.Attributes
 import Html.Events exposing (onSubmit)
 import Layout exposing (..)
+import Maybe.Extra as Maybe
+import Set exposing (Set)
 import Util.Update as Update
 
 
@@ -31,6 +33,7 @@ type alias Model =
     { create : Maybe CreateModel
     , participants : List Participant
     , names : Dict Int String
+    , lowercaseNames : Set String
     , nextId : Int
     }
 
@@ -45,6 +48,7 @@ init =
     { create = Nothing
     , participants = []
     , names = Dict.empty
+    , lowercaseNames = Set.empty
     , nextId = 1
     }
 
@@ -105,7 +109,8 @@ viewCreateModal model =
 
                 Just createModel ->
                     ( [ textInput "Name" createModel.name CreateUpdate ]
-                    , createModel.name.value |> String.trim |> String.isEmpty
+                    , String.isEmpty (createModel.name.value |> String.trim)
+                        || Maybe.isJust createModel.name.validationError
                     )
     in
     Html.form
@@ -136,7 +141,13 @@ update msg model =
                                     nameField =
                                         createModel.name
                                 in
-                                { createModel | name = { nameField | value = name } }
+                                { createModel
+                                    | name =
+                                        { nameField
+                                            | value = name
+                                            , validationError = validateName model name
+                                        }
+                                }
                             )
               }
             , Cmd.none
@@ -155,6 +166,7 @@ update msg model =
             in
             case participant of
                 Err error ->
+                    -- TODO Print error on page.
                     let
                         _ =
                             Debug.log "error" error
@@ -169,6 +181,7 @@ update msg model =
                                 -- Keep the participant list sorted by name (case insensitively).
                                 |> List.sortBy (.name >> String.toLower)
                         , names = model.names |> Dict.insert id value.name
+                        , lowercaseNames = model.lowercaseNames |> Set.insert (value.name |> String.toLower)
                         , create = Nothing
                         , nextId = id + 1
                       }
@@ -181,18 +194,32 @@ update msg model =
 
 create : Int -> String -> Result String Participant
 create id name =
+    -- Should probably run the name through the validator...
     if String.isEmpty name then
         Err "cannot create participant with empty name"
 
     else
-        Ok { id = id, name = name |> cleanName }
+        Ok
+            { id = id
+            , name = name |> cleanName
+            }
 
 
 cleanName : String -> String
 cleanName =
-    String.uncons
+    String.trim
+        >> String.uncons
         >> Maybe.map
             (\( first, rest ) ->
                 String.toUpper (String.fromChar first) ++ rest
             )
         >> Maybe.withDefault ""
+
+
+validateName : Model -> String -> Maybe String
+validateName model name =
+    if model.lowercaseNames |> Set.member (name |> String.toLower) then
+        Just "Duplicate name."
+
+    else
+        Nothing

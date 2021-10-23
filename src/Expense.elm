@@ -90,7 +90,7 @@ create id model =
             { id = id |> String.fromInt
             , payer = payerId
             , amount = amount
-            , description = model.description.value
+            , description = model.description.value |> String.trim
             , receivers = receivers
             }
         )
@@ -277,6 +277,7 @@ update msg model =
             in
             case expense of
                 Err error ->
+                    -- TODO Print error on page.
                     let
                         _ =
                             Debug.log "error" error

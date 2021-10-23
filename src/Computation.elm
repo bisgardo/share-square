@@ -59,6 +59,7 @@ viewSummary participants model =
                 [ Html.input
                     [ Html.Attributes.class "form-check-input"
                     , Html.Attributes.id "computation-summary-outlay"
+                    , Html.Attributes.name "computation-summary"
                     , Html.Attributes.type_ "radio"
                     , model.summaryPerspective == SummaryPerspectiveOutlays |> Html.Attributes.checked
                     , Html.Events.onCheck (\_ -> SetSummaryPerspective SummaryPerspectiveOutlays)
@@ -74,6 +75,7 @@ viewSummary participants model =
                 [ Html.input
                     [ Html.Attributes.class "form-check-input"
                     , Html.Attributes.id "computation-summary-debt"
+                    , Html.Attributes.name "computation-summary"
                     , Html.Attributes.type_ "radio"
                     , model.summaryPerspective == SummaryPerspectiveDebt |> Html.Attributes.checked
                     , Html.Events.onCheck (\_ -> SetSummaryPerspective SummaryPerspectiveDebt)
