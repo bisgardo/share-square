@@ -10,7 +10,7 @@ import Util.Update as Update
 
 type alias Participant =
     { id : Int
-    , name : String
+    , name : String -- TODO require unique names
     }
 
 

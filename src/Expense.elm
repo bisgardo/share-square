@@ -14,6 +14,14 @@ import Util.Dict as Dict
 import Util.Update as Update
 
 
+createModalId =
+    "expense-create"
+
+
+maxDescriptionLength =
+    50
+
+
 type Msg
     = LoadCreate
     | CreateSubmit
@@ -21,6 +29,7 @@ type Msg
     | CreateEditAmount String
     | CreateEditPayer String
     | CreateEditReceiver String Bool
+    | CreateEditDescription String
     | LayoutMsg Layout.Msg
     | ParticipantMsg Participant.Msg
 
@@ -40,11 +49,8 @@ type alias CreateModel =
     { amount : Validated Field
     , payerId : String
     , receivers : Dict String Float
+    , description : Validated Field
     }
-
-
-
--- TODO Add comment field.
 
 
 type alias Expense =
@@ -52,11 +58,13 @@ type alias Expense =
     , payer : Int
     , amount : Float
     , receivers : Dict Int Float -- map from participant ID to fractional part
+    , description : String
     }
 
 
 create : Int -> CreateModel -> Result String Expense
 create id model =
+    -- Should probably run values though their validators...
     let
         payerResult =
             model.payerId
@@ -66,7 +74,7 @@ create id model =
         amountResult =
             model.amount.value
                 |> String.toFloat
-                |> Result.fromMaybe "cannot parse amount"
+                |> Result.fromMaybe ("cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number")
 
         receiverResult =
             model.receivers
@@ -83,6 +91,7 @@ create id model =
             , payer = payerId
             , amount = amount
             , receivers = receivers
+            , description = model.description.value
             }
         )
         payerResult
@@ -103,16 +112,17 @@ initCreate : String -> Dict String Float -> CreateModel
 initCreate initPayerId initReceiverIds =
     { payerId = initPayerId
     , amount =
-        { key = "new-expense-amount"
+        { key = "expense-create-amount"
         , value = ""
         , validationError = Nothing
         }
     , receivers = initReceiverIds
+    , description =
+        { key = "expense-create-description"
+        , value = ""
+        , validationError = Nothing
+        }
     }
-
-
-createModalId =
-    "expense-create"
 
 
 view : Model -> Html Msg
@@ -132,13 +142,20 @@ view model =
                                             name =
                                                 participant.name
                                         in
-                                        ( Debug.log "name" name, name |> Html.text |> List.singleton |> Html.th [ Html.Attributes.scope "col" ] )
+                                        ( name
+                                        , name
+                                            |> Html.text
+                                            |> List.singleton
+                                            |> Html.th [ Html.Attributes.scope "col" ]
+                                        )
                                     )
                            )
                         ++ [ ( Participant.createModalId
-                             , Html.td
-                                [ Html.Attributes.align "right" ]
-                                [ Participant.viewCreateOpen |> Html.map ParticipantMsg
+                               -- TODO Figure out how to align properly.
+                             , Html.th
+                                []
+                                [ Html.div [ Html.Attributes.style "overflow" "auto" ] [ Html.div [ class "float-end" ] [ Participant.viewCreateOpen |> Html.map ParticipantMsg ] ]
+                                , Html.div [] [ Html.text "Description" ]
                                 ]
                              )
                            ]
@@ -163,6 +180,7 @@ view model =
                                                 )
                                         )
                                         model.participant.participants
+                                    ++ [ Html.td [] [ expense.description |> Html.text ] ]
                                 )
                             )
                         )
@@ -198,6 +216,7 @@ viewCreateModal model =
                     ( viewAdd model.participant createModel
                     , String.isEmpty createModel.amount.value
                         || Maybe.isJust createModel.amount.validationError
+                        || Maybe.isJust createModel.description.validationError
                     )
     in
     Html.form
@@ -214,6 +233,7 @@ viewAdd participantModel model =
     [ optionsInput "new-expense-payer" "Payer" participantsFields model.payerId CreateEditPayer
     , textInput "Amount" model.amount CreateEditAmount
     , checkboxesInput "Receivers" participantsFields (model.receivers |> Dict.keys |> Set.fromList) CreateEditReceiver
+    , textInput "Description" model.description CreateEditDescription
     ]
 
 
@@ -234,7 +254,11 @@ update msg model =
                                 (\firstParticipant ->
                                     initCreate
                                         (firstParticipant.id |> String.fromInt)
-                                        (model.participant.participants |> List.map (.id >> String.fromInt) |> List.map (\key -> ( key, 1.0 )) |> Dict.fromList)
+                                        (model.participant.participants
+                                            |> List.map (.id >> String.fromInt)
+                                            |> List.map (\key -> ( key, 1.0 ))
+                                            |> Dict.fromList
+                                        )
                                 )
                 }
               , False
@@ -330,6 +354,30 @@ update msg model =
             , Cmd.none
             )
 
+        CreateEditDescription description ->
+            ( ( { model
+                    | create =
+                        model.create
+                            |> Maybe.map
+                                (\createModel ->
+                                    let
+                                        descriptionField =
+                                            createModel.description
+                                    in
+                                    { createModel
+                                        | description =
+                                            { descriptionField
+                                                | value = description
+                                                , validationError = validateDescription description
+                                            }
+                                    }
+                                )
+                }
+              , False
+              )
+            , Cmd.none
+            )
+
         LayoutMsg layoutMsg ->
             case layoutMsg of
                 ModalClosed modalId ->
@@ -361,3 +409,12 @@ validateAmount amount =
 
             Just _ ->
                 Nothing
+
+
+validateDescription : String -> Maybe String
+validateDescription description =
+    if String.length description > maxDescriptionLength then
+        Just <| "Longer than " ++ String.fromInt maxDescriptionLength ++ " characters."
+
+    else
+        Nothing

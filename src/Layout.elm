@@ -145,7 +145,12 @@ textInput label field tagger =
         [ Html.label [ class "col-sm-2 col-form-label", Html.Attributes.for field.key ] [ text label ]
         , div [ class "col-sm-10" ] <|
             [ Html.input
-                ([ Html.Attributes.id field.key, type_ "text", class "form-control", onInput tagger, Html.Attributes.value field.value ]
+                ([ Html.Attributes.id field.key
+                 , type_ "text"
+                 , class "form-control"
+                 , onInput tagger
+                 , Html.Attributes.value field.value
+                 ]
                     ++ validation field.validationError (\_ -> class "is-invalid")
                 )
                 []
