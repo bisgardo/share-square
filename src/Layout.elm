@@ -2,8 +2,8 @@ port module Layout exposing (..)
 
 import Html exposing (Html, button, div, h5, text)
 import Html.Attributes exposing (class, disabled, tabindex, type_)
-import Html.Events exposing (onCheck, onClick, onInput)
-import Maybe.Extra
+import Html.Events exposing (onCheck, onInput)
+import Maybe.Extra as Maybe
 import Set exposing (Set)
 
 
@@ -74,15 +74,17 @@ modal key title body disableSubmit =
         ]
 
 
-openModalButton : String -> String -> msg -> Html msg
-openModalButton key label loadMsg =
+openModalButton : String -> String -> String -> List (Html.Attribute msg) -> Html msg
+openModalButton id key label attributes =
     button
-        [ type_ "button"
-        , class "btn btn-primary"
-        , data "bs-toggle" "modal"
-        , data "bs-target" ("#" ++ key)
-        , onClick loadMsg
-        ]
+        ([ Html.Attributes.id id
+         , type_ "button"
+         , class "btn btn-primary"
+         , data "bs-toggle" "modal"
+         , data "bs-target" ("#" ++ key)
+         ]
+            ++ attributes
+        )
         [ text label ]
 
 
@@ -107,11 +109,16 @@ type alias Validated a =
     }
 
 
+isInvalid : Validated a -> Bool
+isInvalid =
+    .validationError >> Maybe.isJust
+
+
 optionsInput : String -> String -> List Field -> String -> (String -> msg) -> Html msg
 optionsInput key label options value tagger =
     div [ rowClass, class "row mb-3" ]
-        [ Html.label [ class "col-sm-2 col-form-label", Html.Attributes.for key ] [ text label ]
-        , div [ class "col-sm-10" ]
+        [ Html.label [ class "col-sm-3 col-form-label", Html.Attributes.for key ] [ text label ]
+        , div [ class "col-sm-9" ]
             [ Html.select
                 [ Html.Attributes.id key, class "form-select", onInput tagger ]
                 (List.map (optionInput value) options)
@@ -140,11 +147,16 @@ optionSelected condition =
 textInput : String -> Validated Field -> (String -> msg) -> Html msg
 textInput label field tagger =
     div [ class "row mb-3" ] <|
-        [ Html.label [ class "col-sm-2 col-form-label", Html.Attributes.for field.key ] [ text label ]
-        , div [ class "col-sm-10" ] <|
+        [ Html.label [ class "col-sm-3 col-form-label", Html.Attributes.for field.key ] [ text label ]
+        , div [ class "col-sm-9" ] <|
             [ Html.input
-                ([ Html.Attributes.id field.key, type_ "text", class "form-control", onInput tagger, Html.Attributes.value field.value ]
-                    ++ validation field.validationError (\_ -> class "is-invalid")
+                ([ Html.Attributes.id field.key
+                 , type_ "text"
+                 , class "form-control"
+                 , onInput tagger
+                 , Html.Attributes.value field.value
+                 ]
+                    ++ validation field.validationError (class "is-invalid" |> always)
                 )
                 []
             ]
@@ -159,8 +171,8 @@ textInput label field tagger =
 checkboxesInput : String -> List Field -> Set String -> (String -> Bool -> msg) -> Html msg
 checkboxesInput label fields checkedKeys tagger =
     Html.fieldset [ class "row mb-3" ]
-        [ Html.legend [ class "col-form-label col-sm-2 pt-0" ] [ text label ]
-        , div [ class "col-sm-10" ] <|
+        [ Html.legend [ class "col-form-label col-sm-3 pt-0" ] [ text label ]
+        , div [ class "col-sm-9" ] <|
             List.map
                 (\field ->
                     div [ class "form-check" ]
@@ -185,7 +197,7 @@ checkboxesInput label fields checkedKeys tagger =
 
 validation : Maybe String -> (String -> a) -> List a
 validation error generate =
-    Maybe.map generate error |> Maybe.Extra.toList
+    Maybe.map generate error |> Maybe.toList
 
 
 port closeModal : String -> Cmd msg

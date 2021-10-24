@@ -5,6 +5,7 @@ import Browser.Dom as Dom
 import Computation
 import Expense
 import Html exposing (Html)
+import Html.Attributes
 import Layout exposing (..)
 import Participant
 import Task
@@ -18,15 +19,13 @@ type alias Flags =
 
 type alias Model =
     { environment : String
-    , participant : Participant.Model
     , expense : Expense.Model
     , computation : Computation.Model
     }
 
 
 type Msg
-    = ParticipantMsg Participant.Msg
-    | ExpenseMsg Expense.Msg
+    = ExpenseMsg Expense.Msg
     | ComputationMsg Computation.Msg
     | DomMsg (Result Dom.Error ())
 
@@ -44,7 +43,6 @@ main =
 init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( { environment = flags.environment
-      , participant = Participant.init
       , expense = Expense.init
       , computation = Computation.init
       }
@@ -62,44 +60,39 @@ subscriptions model =
 view : Model -> Browser.Document Msg
 view model =
     { title = "Share 'n square"
-    , body = [ model |> viewBody ]
+    , body = [ viewBody model ]
     }
 
 
 viewBody : Model -> Html Msg
 viewBody model =
     container <|
-        List.concat
-            [ viewParticipants model
-            , viewExpenses model
-            , viewComputation model
+        [ Html.div [ Html.Attributes.class "mb-4" ]
+            [ Html.h1 [ Html.Attributes.class "d-inline" ] [ Html.text "Share 'n square" ]
+            , Html.p [ Html.Attributes.class "lead d-inline ms-2" ] [ Html.text "Expense calculator" ]
             ]
-
-
-viewParticipants : Model -> List (Html Msg)
-viewParticipants model =
-    [ Html.h1 [] [ Html.text "Participants" ]
-    , model.participant
-        |> Participant.view
-        |> Html.map ParticipantMsg
-    ]
+        ]
+            ++ List.concat
+                [ viewExpenses model
+                , viewComputation model
+                ]
 
 
 viewExpenses : Model -> List (Html Msg)
 viewExpenses model =
-    List.ifNonEmpty model.participant.participants <|
-        [ Html.h1 [] [ Html.text "Expenses" ]
-        , model.expense
-            |> Expense.view model.participant
-            |> Html.map ExpenseMsg
-        ]
+    [ Html.h2 [] [ Html.text "Expenses" ]
+    , model.expense
+        |> Expense.view
+        |> Html.map ExpenseMsg
+    ]
 
 
 viewComputation : Model -> List (Html Msg)
 viewComputation model =
     List.ifNonEmpty model.expense.expenses
-        [ model.computation
-            |> Computation.view model.participant.names
+        [ Html.h2 [] [ Html.text "Computation" ]
+        , model.computation
+            |> Computation.view model.expense.participant.names
             |> Html.map ComputationMsg
         ]
 
@@ -107,23 +100,14 @@ viewComputation model =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        ParticipantMsg participantMsg ->
-            let
-                ( newParticipantModel, newParticipantCmd ) =
-                    Participant.update participantMsg model.participant
-            in
-            ( { model | participant = newParticipantModel }
-            , Cmd.map ParticipantMsg newParticipantCmd
-            )
-
         ExpenseMsg expenseMsg ->
             let
                 ( ( newExpenseModel, recompute ), newExpensesCmd ) =
-                    Expense.update model.participant.participants expenseMsg model.expense
+                    Expense.update expenseMsg model.expense
 
                 ( newComputationModel, newComputationCmd ) =
                     if recompute then
-                        Computation.Recompute model.participant.participants newExpenseModel.expenses
+                        Computation.Recompute (model.expense.participant.participants |> List.map .id) newExpenseModel.expenses
                             |> Computation.update model.computation
 
                     else

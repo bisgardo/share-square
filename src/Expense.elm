@@ -4,6 +4,7 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events
+import Html.Keyed
 import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
@@ -13,19 +14,31 @@ import Util.Dict as Dict
 import Util.Update as Update
 
 
+createModalId =
+    "expense-create"
+
+
+maxDescriptionLength =
+    50
+
+
 type Msg
     = LoadCreate
     | CreateSubmit
-    | CreateEditAmount String
-    | CreateEditPayer String
-    | CreateEditReceiver String Bool
     | CloseModal
+    | CreateEditPayer String
+    | CreateEditAmount String
+    | CreateEditDescription String
+    | CreateEditReceiver String Bool
     | LayoutMsg Layout.Msg
+    | ParticipantMsg Participant.Msg
 
 
 type alias Model =
     { create : Maybe CreateModel
     , expenses : List Expense
+    , participant : Participant.Model
+    , nextExpenseId : Int
     }
 
 
@@ -33,21 +46,25 @@ type alias Model =
 The strings in this type are really ints but keeping them as strings saves conversions to/from HTML.
 -}
 type alias CreateModel =
-    { amount : Validated Field
-    , payerId : String
+    { payerId : String
+    , amount : Validated Field
+    , description : Validated Field
     , receivers : Dict String Float
     }
 
 
 type alias Expense =
-    { payer : Int
+    { id : String
+    , payer : Int
     , amount : Float
+    , description : String
     , receivers : Dict Int Float -- map from participant ID to fractional part
     }
 
 
-create : CreateModel -> Result String Expense
-create model =
+create : Int -> CreateModel -> Result String Expense
+create id model =
+    -- Should probably run values though their validators...
     let
         payerResult =
             model.payerId
@@ -57,7 +74,7 @@ create model =
         amountResult =
             model.amount.value
                 |> String.toFloat
-                |> Result.fromMaybe "cannot parse amount"
+                |> Result.fromMaybe ("cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number")
 
         receiverResult =
             model.receivers
@@ -70,8 +87,10 @@ create model =
     in
     Result.map3
         (\payerId amount receivers ->
-            { payer = payerId
+            { id = id |> String.fromInt
+            , payer = payerId
             , amount = amount
+            , description = model.description.value |> String.trim
             , receivers = receivers
             }
         )
@@ -84,6 +103,8 @@ init : Model
 init =
     { create = Nothing
     , expenses = []
+    , participant = Participant.init
+    , nextExpenseId = 1
     }
 
 
@@ -91,7 +112,12 @@ initCreate : String -> Dict String Float -> CreateModel
 initCreate initPayerId initReceiverIds =
     { payerId = initPayerId
     , amount =
-        { key = "new-expense-amount"
+        { key = "expense-create-amount"
+        , value = ""
+        , validationError = Nothing
+        }
+    , description =
+        { key = "expense-create-description"
         , value = ""
         , validationError = Nothing
         }
@@ -99,30 +125,115 @@ initCreate initPayerId initReceiverIds =
     }
 
 
-createModalId =
-    "add-expense"
+view : Model -> Html Msg
+view model =
+    row <|
+        [ Html.table [ class "table" ]
+            [ Html.thead []
+                [ Html.tr [] <|
+                    [ Html.th [] [ Html.text "#" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Description" ]
+                    , Html.th
+                        [ Html.Attributes.scope "col"
+                        , Html.Attributes.colspan (model.participant.participants |> List.length |> max 1)
+                        ]
+                        [ Html.text "Participants" ]
+                    , Html.td [] []
+                    ]
 
+                -- Using keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
+                , Html.Keyed.node "tr" [] <|
+                    [ ( "id", Html.td [] [] )
+                    , ( "payer", Html.td [] [] )
+                    , ( "amount", Html.td [] [] )
+                    , ( "description", Html.td [] [] )
+                    ]
+                        ++ (model.participant.participants
+                                |> List.map
+                                    (\participant ->
+                                        let
+                                            name =
+                                                participant.name
+                                        in
+                                        ( name, name |> Html.text |> List.singleton |> Html.td [] )
+                                    )
+                                |> (\htmls ->
+                                        -- Ensure that there is at least 1 cell.
+                                        if List.isEmpty htmls then
+                                            [ ( "empty", Html.td [] [ Html.i [] [ "None" |> Html.text ] ] ) ]
 
-view : Participant.Model -> Model -> Html Msg
-view participantModel model =
-    row1 <|
-        Html.form [ Html.Events.onSubmit CreateSubmit ] <|
-            [ openModalButton createModalId "Add" LoadCreate
-            , let
-                ( body, disable ) =
-                    case model.create of
-                        Nothing ->
-                            ( [ Html.text "Loading..." ], True )
+                                        else
+                                            htmls
+                                   )
+                           )
+                        ++ [ ( "participant-create", Html.td [ Html.Attributes.align "right" ] [ Participant.viewCreateOpen |> Html.map ParticipantMsg ] )
+                           ]
+                ]
+            , Html.Keyed.node "tbody" [] <|
+                (model.expenses
+                    |> List.map
+                        (\expense ->
+                            ( expense.id
+                            , Html.tr []
+                                ([ Html.td [] [ Html.text expense.id ]
+                                 , Html.td [] [ Participant.lookupName expense.payer model.participant.names |> Html.text ]
+                                 , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
+                                 , Html.td [] [ expense.description |> Html.text ]
+                                 ]
+                                    ++ List.map
+                                        (\participant ->
+                                            Html.td []
+                                                (if Dict.member participant.id expense.receivers then
+                                                    [ Html.text "✓" ]
 
-                        Just createModel ->
-                            ( viewAdd participantModel createModel
-                            , String.isEmpty createModel.amount.value
-                                || Maybe.isJust createModel.amount.validationError
+                                                 else
+                                                    []
+                                                )
+                                        )
+                                        model.participant.participants
+                                    ++ [ Html.td [] [] ]
+                                )
                             )
-              in
-              modal createModalId "Add expense" body disable
+                        )
+                )
             ]
-                ++ viewExpenses participantModel model.expenses
+        , viewCreateOpen model
+        , Participant.viewCreateModal model.participant |> Html.map ParticipantMsg
+        , viewCreateModal model
+        ]
+
+
+viewCreateOpen : Model -> Html Msg
+viewCreateOpen model =
+    openModalButton
+        Participant.createId
+        createModalId
+        "Add expense"
+        [ List.isEmpty model.participant.participants
+            |> Html.Attributes.disabled
+        , Html.Events.onClick LoadCreate
+        ]
+
+
+viewCreateModal : Model -> Html Msg
+viewCreateModal model =
+    let
+        ( body, disable ) =
+            case model.create of
+                Nothing ->
+                    ( [ Html.text "Loading..." ], True )
+
+                Just createModel ->
+                    ( viewAdd model.participant createModel
+                    , String.isEmpty createModel.amount.value
+                        || List.any isInvalid [ createModel.amount, createModel.description ]
+                    )
+    in
+    Html.form
+        [ Html.Events.onSubmit CreateSubmit ]
+        [ modal createModalId "Add expense" body disable ]
 
 
 viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
@@ -133,44 +244,8 @@ viewAdd participantModel model =
     in
     [ optionsInput "new-expense-payer" "Payer" participantsFields model.payerId CreateEditPayer
     , textInput "Amount" model.amount CreateEditAmount
+    , textInput "Description" model.description CreateEditDescription
     , checkboxesInput "Receivers" participantsFields (model.receivers |> Dict.keys |> Set.fromList) CreateEditReceiver
-    ]
-
-
-viewExpenses : Participant.Model -> List Expense -> List (Html Msg)
-viewExpenses participantModel expenseModels =
-    [ Html.table [ class "table" ]
-        [ Html.thead []
-            [ Html.tr [] <|
-                [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
-                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
-                ]
-                    ++ List.map
-                        (.name >> Html.text >> List.singleton >> Html.th [ Html.Attributes.scope "col" ])
-                        participantModel.participants
-            ]
-        , Html.tbody [] <|
-            List.map
-                (\expense ->
-                    Html.tr []
-                        ([ Html.td [] [ Participant.lookupName expense.payer participantModel.names |> Html.text ]
-                         , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
-                         ]
-                            ++ List.map
-                                (\participant ->
-                                    Html.td []
-                                        (if Dict.member participant.id expense.receivers then
-                                            [ Html.text "✓" ]
-
-                                         else
-                                            []
-                                        )
-                                )
-                                participantModel.participants
-                        )
-                )
-                expenseModels
-        ]
     ]
 
 
@@ -179,19 +254,23 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : List Participant -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update participants msg model =
+update : Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update msg model =
     case msg of
         LoadCreate ->
             ( ( { model
                     | create =
-                        participants
+                        model.participant.participants
                             |> List.head
                             |> Maybe.map
                                 (\firstParticipant ->
                                     initCreate
                                         (firstParticipant.id |> String.fromInt)
-                                        (participants |> List.map (.id >> String.fromInt) |> List.map (\key -> ( key, 1.0 )) |> Dict.fromList)
+                                        (model.participant.participants
+                                            |> List.map (.id >> String.fromInt)
+                                            |> List.map (\key -> ( key, 1.0 ))
+                                            |> Dict.fromList
+                                        )
                                 )
                 }
               , False
@@ -201,13 +280,17 @@ update participants msg model =
 
         CreateSubmit ->
             let
+                id =
+                    model.nextExpenseId
+
                 expense =
                     model.create
                         |> Result.fromMaybe "no create model found"
-                        |> Result.andThen create
+                        |> Result.andThen (create id)
             in
             case expense of
                 Err error ->
+                    -- TODO Print error on page.
                     let
                         _ =
                             Debug.log "error" error
@@ -218,6 +301,7 @@ update participants msg model =
                     ( ( { model
                             | expenses =
                                 model.expenses ++ [ value ]
+                            , nextExpenseId = id + 1
                         }
                       , True
                       )
@@ -226,6 +310,20 @@ update participants msg model =
 
         CloseModal ->
             ( ( model, False ), closeModal createModalId )
+
+        CreateEditPayer payer ->
+            ( ( { model
+                    | create =
+                        model.create
+                            |> Maybe.map
+                                (\createModel ->
+                                    { createModel | payerId = payer }
+                                )
+                }
+              , False
+              )
+            , Cmd.none
+            )
 
         CreateEditAmount amount ->
             ( ( { model
@@ -251,11 +349,24 @@ update participants msg model =
             , Cmd.none
             )
 
-        CreateEditPayer payer ->
+        CreateEditDescription description ->
             ( ( { model
                     | create =
                         model.create
-                            |> Maybe.map (\createModel -> { createModel | payerId = payer })
+                            |> Maybe.map
+                                (\createModel ->
+                                    let
+                                        descriptionField =
+                                            createModel.description
+                                    in
+                                    { createModel
+                                        | description =
+                                            { descriptionField
+                                                | value = description
+                                                , validationError = validateDescription description
+                                            }
+                                    }
+                                )
                 }
               , False
               )
@@ -292,6 +403,15 @@ update participants msg model =
                     else
                         ( ( model, False ), Cmd.none )
 
+        ParticipantMsg participantMsg ->
+            let
+                ( newParticipantModel, newParticipantCmd ) =
+                    Participant.update participantMsg model.participant
+            in
+            ( ( { model | participant = newParticipantModel }, False )
+            , Cmd.map ParticipantMsg newParticipantCmd
+            )
+
 
 validateAmount : String -> Maybe String
 validateAmount amount =
@@ -305,3 +425,12 @@ validateAmount amount =
 
             Just _ ->
                 Nothing
+
+
+validateDescription : String -> Maybe String
+validateDescription description =
+    if String.length description > maxDescriptionLength then
+        Just <| "Longer than " ++ String.fromInt maxDescriptionLength ++ " characters."
+
+    else
+        Nothing
