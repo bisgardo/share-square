@@ -3,7 +3,7 @@ port module Layout exposing (..)
 import Html exposing (Html, button, div, h5, text)
 import Html.Attributes exposing (class, disabled, tabindex, type_)
 import Html.Events exposing (onCheck, onInput)
-import Maybe.Extra
+import Maybe.Extra as Maybe
 import Set exposing (Set)
 
 
@@ -109,6 +109,11 @@ type alias Validated a =
     }
 
 
+isInvalid : Validated a -> Bool
+isInvalid =
+    .validationError >> Maybe.isJust
+
+
 optionsInput : String -> String -> List Field -> String -> (String -> msg) -> Html msg
 optionsInput key label options value tagger =
     div [ rowClass, class "row mb-3" ]
@@ -151,7 +156,7 @@ textInput label field tagger =
                  , onInput tagger
                  , Html.Attributes.value field.value
                  ]
-                    ++ validation field.validationError (\_ -> class "is-invalid")
+                    ++ validation field.validationError (class "is-invalid" |> always)
                 )
                 []
             ]
@@ -192,7 +197,7 @@ checkboxesInput label fields checkedKeys tagger =
 
 validation : Maybe String -> (String -> a) -> List a
 validation error generate =
-    Maybe.map generate error |> Maybe.Extra.toList
+    Maybe.map generate error |> Maybe.toList
 
 
 port closeModal : String -> Cmd msg

@@ -110,7 +110,7 @@ viewCreateModal model =
                 Just createModel ->
                     ( [ textInput "Name" createModel.name CreateUpdate ]
                     , String.isEmpty (createModel.name.value |> String.trim)
-                        || Maybe.isJust createModel.name.validationError
+                        || List.any isInvalid [ createModel.name ]
                     )
     in
     Html.form
@@ -209,11 +209,11 @@ cleanName : String -> String
 cleanName =
     String.trim
         >> String.uncons
-        >> Maybe.map
+        >> Maybe.unwrap
+            ""
             (\( first, rest ) ->
                 String.toUpper (String.fromChar first) ++ rest
             )
-        >> Maybe.withDefault ""
 
 
 validateName : Model -> String -> Maybe String

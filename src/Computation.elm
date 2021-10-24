@@ -52,7 +52,7 @@ view participants model =
 viewSummary : Dict Int String -> Model -> Html Msg
 viewSummary participants model =
     div []
-        [ Html.h1 [] [ text "Summary" ]
+        [ Html.h3 [] [ text "Summary" ]
         , Html.p []
             [ div [ Html.Attributes.class "form-check form-check-inline" ]
                 [ Html.input
@@ -61,7 +61,7 @@ viewSummary participants model =
                     , Html.Attributes.name "computation-summary"
                     , Html.Attributes.type_ "radio"
                     , model.summaryPerspective == SummaryPerspectiveOutlays |> Html.Attributes.checked
-                    , Html.Events.onCheck (\_ -> SetSummaryPerspective SummaryPerspectiveOutlays)
+                    , Html.Events.onCheck (SetSummaryPerspective SummaryPerspectiveOutlays |> always)
                     ]
                     []
                 , Html.label
@@ -77,7 +77,7 @@ viewSummary participants model =
                     , Html.Attributes.name "computation-summary"
                     , Html.Attributes.type_ "radio"
                     , model.summaryPerspective == SummaryPerspectiveDebt |> Html.Attributes.checked
-                    , Html.Events.onCheck (\_ -> SetSummaryPerspective SummaryPerspectiveDebt)
+                    , Html.Events.onCheck (SetSummaryPerspective SummaryPerspectiveDebt |> always)
                     ]
                     []
                 , Html.label
@@ -135,7 +135,7 @@ viewSummary participants model =
 viewBalance : Dict Int String -> Model -> Html Msg
 viewBalance participants model =
     div [] <|
-        [ Html.h1 [] [ text "Balances" ]
+        [ Html.h3 [] [ text "Balances" ]
         , Html.p []
             [ Html.ul []
                 (case model.computed of

@@ -5,6 +5,7 @@ import Browser.Dom as Dom
 import Computation
 import Expense
 import Html exposing (Html)
+import Html.Attributes
 import Layout exposing (..)
 import Participant
 import Task
@@ -66,15 +67,20 @@ view model =
 viewBody : Model -> Html Msg
 viewBody model =
     container <|
-        List.concat
-            [ viewExpenses model
-            , viewComputation model
+        [ Html.div [ Html.Attributes.class "mb-4" ]
+            [ Html.h1 [ Html.Attributes.class "d-inline" ] [ Html.text "Share 'n square" ]
+            , Html.p [ Html.Attributes.class "lead d-inline ms-2" ] [ Html.text "Expense calculator" ]
             ]
+        ]
+            ++ List.concat
+                [ viewExpenses model
+                , viewComputation model
+                ]
 
 
 viewExpenses : Model -> List (Html Msg)
 viewExpenses model =
-    [ Html.h1 [] [ Html.text "Expenses" ]
+    [ Html.h2 [] [ Html.text "Expenses" ]
     , model.expense
         |> Expense.view
         |> Html.map ExpenseMsg
@@ -84,7 +90,8 @@ viewExpenses model =
 viewComputation : Model -> List (Html Msg)
 viewComputation model =
     List.ifNonEmpty model.expense.expenses
-        [ model.computation
+        [ Html.h2 [] [ Html.text "Computation" ]
+        , model.computation
             |> Computation.view model.expense.participant.names
             |> Html.map ComputationMsg
         ]

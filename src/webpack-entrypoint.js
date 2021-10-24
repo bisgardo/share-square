@@ -29,5 +29,7 @@ app.ports.closeModal.subscribe(id => {
 });
 
 // Enable tooltips.
+// TODO It doesn't seem like the tooltips have been reliably initialized when the focus call fires.
+//      Should be implemented as a MutableObserver instead?
 [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     .forEach(element => new Tooltip(element));

@@ -162,7 +162,7 @@ view model =
                                 |> (\htmls ->
                                         -- Ensure that there is at least 1 cell.
                                         if List.isEmpty htmls then
-                                            [ ( "empty", Html.td [] [] ) ]
+                                            [ ( "empty", Html.td [] [ Html.i [] [ "None" |> Html.text ] ] ) ]
 
                                         else
                                             htmls
@@ -228,8 +228,7 @@ viewCreateModal model =
                 Just createModel ->
                     ( viewAdd model.participant createModel
                     , String.isEmpty createModel.amount.value
-                        || Maybe.isJust createModel.amount.validationError
-                        || Maybe.isJust createModel.description.validationError
+                        || List.any isInvalid [ createModel.amount, createModel.description ]
                     )
     in
     Html.form
@@ -316,7 +315,10 @@ update msg model =
             ( ( { model
                     | create =
                         model.create
-                            |> Maybe.map (\createModel -> { createModel | payerId = payer })
+                            |> Maybe.map
+                                (\createModel ->
+                                    { createModel | payerId = payer }
+                                )
                 }
               , False
               )

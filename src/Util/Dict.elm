@@ -1,6 +1,7 @@
 module Util.Dict exposing (..)
 
 import Dict exposing (Dict)
+import Maybe.Extra as Maybe
 
 
 parseKeys : (a -> Result x comparable) -> Dict a c -> Result x (Dict comparable c)
@@ -44,5 +45,4 @@ toFlatList =
 valueSum : comparable -> Dict comparable (Dict b number) -> number
 valueSum key =
     Dict.get key
-        >> Maybe.map (Dict.values >> List.sum)
-        >> Maybe.withDefault 0
+        >> Maybe.unwrap 0 (Dict.values >> List.sum)
