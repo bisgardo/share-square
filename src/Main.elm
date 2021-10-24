@@ -6,10 +6,11 @@ import Computation
 import Expense
 import Html exposing (Html)
 import Html.Attributes
+import Html.Events
 import Layout exposing (..)
+import Maybe.Extra as Maybe
 import Participant
 import Task
-import Util.List as List
 
 
 type alias Flags =
@@ -21,12 +22,19 @@ type alias Model =
     { environment : String
     , expense : Expense.Model
     , computation : Computation.Model
+    , state : State
     }
+
+
+type State
+    = Expenses
+    | Settlement
 
 
 type Msg
     = ExpenseMsg Expense.Msg
     | ComputationMsg Computation.Msg
+    | SetState State
     | DomMsg (Result Dom.Error ())
 
 
@@ -45,6 +53,7 @@ init flags =
     ( { environment = flags.environment
       , expense = Expense.init
       , computation = Computation.init
+      , state = Expenses
       }
     , Dom.focus Participant.createId |> Task.attempt DomMsg
     )
@@ -72,29 +81,74 @@ viewBody model =
             , Html.p [ Html.Attributes.class "lead d-inline ms-2" ] [ Html.text "Expense calculator" ]
             ]
         ]
-            ++ List.concat
-                [ viewExpenses model
-                , viewComputation model
+            ++ viewContent model
+
+
+viewContent : Model -> List (Html Msg)
+viewContent model =
+    [ Html.ul [ Html.Attributes.class "nav nav-tabs mb-2" ]
+        -- TODO Extract vars for IDs.
+        [ Html.li [ Html.Attributes.class "nav-item" ]
+            [ Html.button
+                [ Html.Attributes.type_ "button"
+                , data "bs-toggle" "tab"
+                , data "bs-target" "#expenses"
+                , Html.Attributes.class <|
+                    "nav-link"
+                , SetState Expenses |> Html.Events.onClick
                 ]
+                [ Html.text "Expenses" ]
+            ]
+        , Html.li [ Html.Attributes.class "nav-item" ] <|
+            [ Html.button
+                ([ Html.Attributes.type_ "button"
+                 , data "bs-toggle" "tab"
+                 , data "bs-target" "#settlement"
+                 , Html.Attributes.class "nav-link"
+                 , SetState Settlement |> Html.Events.onClick
+                 ]
+                    ++ (if Maybe.isNothing model.computation.computed then
+                            [ Html.Attributes.class " disabled" ]
 
+                        else
+                            []
+                       )
+                )
+                [ if Maybe.isNothing model.computation.computed then
+                    Html.i [] [ Html.text "Nothing to settle yet..." ]
 
-viewExpenses : Model -> List (Html Msg)
-viewExpenses model =
-    [ Html.h2 [] [ Html.text "Expenses" ]
-    , model.expense
-        |> Expense.view
-        |> Html.map ExpenseMsg
+                  else
+                    Html.text "Settlement"
+                ]
+            ]
+        ]
+    , Html.div [ Html.Attributes.class "tab-content" ]
+        [ Html.div
+            [ Html.Attributes.id "expenses"
+            , Html.Attributes.class "tab-pane fade"
+            ]
+            [ viewExpenses model ]
+        , Html.div
+            [ Html.Attributes.id "settlement"
+            , Html.Attributes.class "tab-pane fade"
+            ]
+            [ viewComputation model ]
+        ]
     ]
 
 
-viewComputation : Model -> List (Html Msg)
+viewExpenses : Model -> Html Msg
+viewExpenses model =
+    model.expense
+        |> Expense.view
+        |> Html.map ExpenseMsg
+
+
+viewComputation : Model -> Html Msg
 viewComputation model =
-    List.ifNonEmpty model.expense.expenses
-        [ Html.h2 [] [ Html.text "Computation" ]
-        , model.computation
-            |> Computation.view model.expense.participant.names
-            |> Html.map ComputationMsg
-        ]
+    model.computation
+        |> Computation.view model.expense.participant.names
+        |> Html.map ComputationMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -128,6 +182,9 @@ update msg model =
             ( { model | computation = newComputationModel }
             , Cmd.map ComputationMsg newComputationCmd
             )
+
+        SetState state ->
+            ( { model | state = state }, Cmd.none )
 
         DomMsg result ->
             let
