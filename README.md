@@ -30,6 +30,9 @@ npm run serve -- --mode=development
 
 The app will open in a browser automatically and the contents refresh whenever the source files change.
 
+Minor caveat: Due to the way that they're initialized, tooltips will not behave properly
+after a hot-reload (i.e. they will fall back to the way that the browser displays title text by default).
+
 ## Docker
 
 Build image based on `nginx`:
