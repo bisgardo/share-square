@@ -93,43 +93,58 @@ viewSummary participants model =
 
             Just computed ->
                 Html.p []
-                    [ Html.ul [] <|
-                        case model.summaryPerspective of
-                            SummaryPerspectiveOutlays ->
-                                computed.expenses
-                                    |> Dict.toFlatList
-                                    |> List.map
-                                        (\( payer, receiver, amount ) ->
-                                            ( lookupName payer participants
-                                            , lookupName receiver participants
-                                            , amount |> Round.round 2
-                                            )
-                                        )
-                                    |> List.sort
-                                    |> List.map
-                                        (\( payer, receiver, amount ) ->
-                                            Html.li []
-                                                [ payer ++ " has expended " ++ amount ++ " for " ++ receiver ++ "." |> text ]
-                                        )
-
-                            SummaryPerspectiveDebt ->
-                                computed.debts
-                                    |> Dict.toFlatList
-                                    |> List.map
-                                        (\( receiver, payer, amount ) ->
-                                            ( lookupName receiver participants
-                                            , lookupName payer participants
-                                            , amount |> Round.round 2
-                                            )
-                                        )
-                                    |> List.sort
-                                    |> List.map
-                                        (\( receiver, payer, amount ) ->
-                                            Html.li []
-                                                [ receiver ++ " owes " ++ payer ++ " " ++ amount ++ "." |> text ]
-                                        )
-                    ]
+                    [ viewSummaryList participants model.summaryPerspective computed ]
         ]
+
+
+viewSummaryList : Dict Int String -> SummaryPerspective -> ComputedModel -> Html Msg
+viewSummaryList participants perspective computed =
+    case perspective of
+        SummaryPerspectiveOutlays ->
+            if Dict.isEmpty computed.expenses then
+                Html.p [] [ Html.i [] [ text "None." ] ]
+
+            else
+                Html.ul []
+                    (computed.expenses
+                        |> Dict.toFlatList
+                        |> List.map
+                            (\( payer, receiver, amount ) ->
+                                ( lookupName payer participants
+                                , lookupName receiver participants
+                                , amount |> Round.round 2
+                                )
+                            )
+                        |> List.sort
+                        |> List.map
+                            (\( payer, receiver, amount ) ->
+                                Html.li []
+                                    [ payer ++ " has expended " ++ amount ++ " for " ++ receiver ++ "." |> text ]
+                            )
+                    )
+
+        SummaryPerspectiveDebt ->
+            if Dict.isEmpty computed.debts then
+                Html.p [] [ Html.i [] [ text "None." ] ]
+
+            else
+                Html.ul []
+                    (computed.debts
+                        |> Dict.toFlatList
+                        |> List.map
+                            (\( receiver, payer, amount ) ->
+                                ( lookupName receiver participants
+                                , lookupName payer participants
+                                , amount |> Round.round 2
+                                )
+                            )
+                        |> List.sort
+                        |> List.map
+                            (\( receiver, payer, amount ) ->
+                                Html.li []
+                                    [ receiver ++ " owes " ++ payer ++ " " ++ amount ++ "." |> text ]
+                            )
+                    )
 
 
 viewBalance : Dict Int String -> Model -> Html Msg
@@ -184,7 +199,7 @@ type alias Debt =
 expensesFromList : List Expense -> Expenses
 expensesFromList =
     List.foldl
-        (\expense ->
+        (\expense outerResult ->
             let
                 weightSum =
                     expense.receivers
@@ -194,21 +209,27 @@ expensesFromList =
                 weightedDebt =
                     expense.receivers
                         |> Dict.foldl
-                            (\receiver amount result ->
+                            (\receiver amount innerResult ->
                                 if receiver == expense.payer then
                                     -- Ignore debt to self.
-                                    result
+                                    innerResult
 
                                 else
-                                    Dict.insert receiver (amount * expense.amount / weightSum) result
+                                    Dict.insert receiver (amount * expense.amount / weightSum) innerResult
                             )
                             Dict.empty
             in
-            Dict.update expense.payer
-                (Maybe.withDefault Dict.empty
-                    >> Dict.sumValues weightedDebt
-                    >> Just
-                )
+            if Dict.isEmpty weightedDebt then
+                -- Happens if the payer is also the only receiver of the expense.
+                outerResult
+
+            else
+                Dict.update expense.payer
+                    (Maybe.withDefault Dict.empty
+                        >> Dict.sumValues weightedDebt
+                        >> Just
+                    )
+                    outerResult
         )
         Dict.empty
 
