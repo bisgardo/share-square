@@ -12,7 +12,8 @@ import Util.Update as Update
 
 type alias Participant =
     { id : Int
-    , name : String -- TODO require unique names
+    , name : String
+    , nameLowercase : String -- used for case-insensitive sorting
     }
 
 
@@ -32,8 +33,8 @@ lookupName id =
 type alias Model =
     { create : Maybe CreateModel
     , participants : List Participant
-    , names : Dict Int String
-    , lowercaseNames : Set String
+    , idToName : Dict Int String
+    , namesLowercase : Set String -- used for case-insensitive duplication check
     , nextId : Int
     }
 
@@ -47,8 +48,8 @@ init : Model
 init =
     { create = Nothing
     , participants = []
-    , names = Dict.empty
-    , lowercaseNames = Set.empty
+    , idToName = Dict.empty
+    , namesLowercase = Set.empty
     , nextId = 1
     }
 
@@ -179,9 +180,9 @@ update msg model =
                             model.participants
                                 ++ [ value ]
                                 -- Keep the participant list sorted by name (case insensitively).
-                                |> List.sortBy (.name >> String.toLower)
-                        , names = model.names |> Dict.insert id value.name
-                        , lowercaseNames = model.lowercaseNames |> Set.insert (value.name |> String.toLower)
+                                |> List.sortBy .nameLowercase
+                        , idToName = model.idToName |> Dict.insert id value.name
+                        , namesLowercase = model.namesLowercase |> Set.insert value.nameLowercase
                         , create = Nothing
                         , nextId = id + 1
                       }
@@ -199,9 +200,14 @@ create id name =
         Err "cannot create participant with empty name"
 
     else
+        let
+            cleanedName =
+                name |> cleanName
+        in
         Ok
             { id = id
-            , name = name |> cleanName
+            , name = cleanedName
+            , nameLowercase = cleanedName |> String.toLower
             }
 
 
@@ -218,7 +224,7 @@ cleanName =
 
 validateName : Model -> String -> Maybe String
 validateName model name =
-    if model.lowercaseNames |> Set.member (name |> String.toLower) then
+    if model.namesLowercase |> Set.member (name |> String.toLower) then
         Just "Duplicate name."
 
     else

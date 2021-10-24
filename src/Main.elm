@@ -92,7 +92,7 @@ viewComputation model =
     List.ifNonEmpty model.expense.expenses
         [ Html.h2 [] [ Html.text "Computation" ]
         , model.computation
-            |> Computation.view model.expense.participant.names
+            |> Computation.view model.expense.participant.idToName
             |> Html.map ComputationMsg
         ]
 
