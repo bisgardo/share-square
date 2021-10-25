@@ -107,7 +107,9 @@ update msg model =
 
                 ( newComputationModel, newComputationCmd ) =
                     if recompute then
-                        Computation.Recompute (model.expense.participant.participants |> List.map .id) newExpenseModel.expenses
+                        Computation.Recompute
+                            (model.expense.participant.participants |> List.map .id)
+                            newExpenseModel.expenses
                             |> Computation.update model.computation
 
                     else
@@ -117,7 +119,10 @@ update msg model =
                 | expense = newExpenseModel
                 , computation = newComputationModel
               }
-            , Cmd.batch [ Cmd.map ExpenseMsg newExpensesCmd, Cmd.map ComputationMsg newComputationCmd ]
+            , Cmd.batch
+                [ newExpensesCmd |> Cmd.map ExpenseMsg
+                , newComputationCmd |> Cmd.map ComputationMsg
+                ]
             )
 
         ComputationMsg computationMsg ->
@@ -126,7 +131,7 @@ update msg model =
                     Computation.update model.computation computationMsg
             in
             ( { model | computation = newComputationModel }
-            , Cmd.map ComputationMsg newComputationCmd
+            , newComputationCmd |> Cmd.map ComputationMsg
             )
 
         DomMsg result ->
