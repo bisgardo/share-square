@@ -25,9 +25,13 @@ toField participant =
 
 
 lookupName : Int -> Dict Int String -> String
-lookupName id =
-    Dict.get id
-        >> Maybe.withDefault ("<" ++ String.fromInt id ++ ">")
+lookupName id idToName =
+    case Dict.get id idToName of
+        Nothing ->
+            "<" ++ String.fromInt id ++ ">"
+
+        Just name ->
+            name
 
 
 type alias Model =
