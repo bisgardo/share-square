@@ -220,7 +220,7 @@ expensesFromList =
                             Dict.empty
             in
             if Dict.isEmpty weightedDebt then
-                -- Happens if the payer is also the only receiver of the expense.
+                -- Ignore entry if the payer is the only receiver of the expense.
                 outerResult
 
             else
