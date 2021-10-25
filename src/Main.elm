@@ -66,6 +66,12 @@ subscriptions model =
         |> Sub.map ExpenseMsg
 
 
+tabIds =
+    { expenses = "expenses"
+    , settlement = "settlement"
+    }
+
+
 view : Model -> Browser.Document Msg
 view model =
     { title = "Share 'n square"
@@ -92,18 +98,17 @@ viewContent model =
             [ Html.button
                 [ Html.Attributes.type_ "button"
                 , data "bs-toggle" "tab"
-                , data "bs-target" "#expenses"
-                , Html.Attributes.class <|
-                    "nav-link"
+                , data "bs-target" ("#" ++ tabIds.expenses)
+                , Html.Attributes.class "nav-link active"
                 , SetState Expenses |> Html.Events.onClick
                 ]
                 [ Html.text "Expenses" ]
             ]
-        , Html.li [ Html.Attributes.class "nav-item" ] <|
+        , Html.li [ Html.Attributes.class "nav-item" ]
             [ Html.button
                 ([ Html.Attributes.type_ "button"
                  , data "bs-toggle" "tab"
-                 , data "bs-target" "#settlement"
+                 , data "bs-target" ("#" ++ tabIds.settlement)
                  , Html.Attributes.class "nav-link"
                  , SetState Settlement |> Html.Events.onClick
                  ]
@@ -124,12 +129,12 @@ viewContent model =
         ]
     , Html.div [ Html.Attributes.class "tab-content" ]
         [ Html.div
-            [ Html.Attributes.id "expenses"
-            , Html.Attributes.class "tab-pane fade"
+            [ Html.Attributes.id tabIds.expenses
+            , Html.Attributes.class "tab-pane fade active show"
             ]
             [ viewExpenses model ]
         , Html.div
-            [ Html.Attributes.id "settlement"
+            [ Html.Attributes.id tabIds.settlement
             , Html.Attributes.class "tab-pane fade"
             ]
             [ viewComputation model ]
