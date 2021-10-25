@@ -178,7 +178,7 @@ view model =
                             ( expense.id
                             , Html.tr []
                                 ([ Html.td [] [ Html.text expense.id ]
-                                 , Html.td [] [ Participant.lookupName expense.payer model.participant.names |> Html.text ]
+                                 , Html.td [] [ Participant.lookupName expense.payer model.participant.idToName |> Html.text ]
                                  , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
                                  , Html.td [] [ expense.description |> Html.text ]
                                  ]

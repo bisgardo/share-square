@@ -147,7 +147,7 @@ viewExpenses model =
 viewComputation : Model -> Html Msg
 viewComputation model =
     model.computation
-        |> Computation.view model.expense.participant.names
+        |> Computation.view model.expense.participant.idToName
         |> Html.map ComputationMsg
 
 
