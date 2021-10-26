@@ -67,22 +67,31 @@ create id model =
     -- Should probably run values though their validators...
     let
         payerResult =
-            model.payerId
-                |> String.toInt
-                |> Result.fromMaybe ("unexpected non-integer key '" ++ model.payerId ++ "' of payer")
+            case model.payerId |> String.toInt of
+                Nothing ->
+                    Err ("unexpected non-integer key '" ++ model.payerId ++ "' of payer")
+
+                Just payerId ->
+                    Ok payerId
 
         amountResult =
-            model.amount.value
-                |> String.toFloat
-                |> Result.fromMaybe ("cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number")
+            case model.amount.value |> String.toFloat of
+                Nothing ->
+                    Err ("cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number")
+
+                Just amount ->
+                    Ok amount
 
         receiverResult =
             model.receivers
                 |> Dict.parseKeys
                     (\key ->
-                        key
-                            |> String.toInt
-                            |> Result.fromMaybe ("unexpected non-integer receiver '" ++ key ++ "'")
+                        case key |> String.toInt of
+                            Nothing ->
+                                Err ("unexpected non-integer receiver '" ++ key ++ "'")
+
+                            Just receiverId ->
+                                Ok receiverId
                     )
     in
     Result.map3
