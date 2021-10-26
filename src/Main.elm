@@ -93,7 +93,6 @@ viewBody model =
 viewContent : Model -> List (Html Msg)
 viewContent model =
     [ Html.ul [ Html.Attributes.class "nav nav-tabs mb-2" ]
-        -- TODO Extract vars for IDs.
         [ Html.li [ Html.Attributes.class "nav-item" ]
             [ Html.button
                 [ Html.Attributes.type_ "button"

@@ -32,6 +32,7 @@ The app will open in a browser automatically and the contents refresh whenever t
 
 Minor caveat: Due to the way that they're initialized, tooltips will not behave properly
 after a hot-reload (i.e. they will fall back to the way that the browser displays title text by default).
+See details [below](#bootstrap-integration).
 
 ## Docker
 
@@ -55,3 +56,18 @@ The npm script `npm run docker` runs both of the above commands.
 
 The Elm sources are formatted according to the whims of `elm-format`.
 Run `npm run fmt` to reformat all Elm source files in the `src` folder:
+
+### Bootstrap integration
+
+The layout of the app is set up as a plain
+[Bootstrap](https://getbootstrap.com/docs/5.1/getting-started/introduction/)
+application. It integrates the modal, tabs, and tooltips components
+which are managed by the Javascript libraries that ship as part of Bootstrap.
+The Elm code only sets up the initial HTML for these components
+and then leaves it to these libraries to modify the nodes (e.g. set classes) appropriately.
+This is safe as long as the virtual DOM doesn't change for any nodes that Bootstrap is managing
+as that would cause Elm to replace them and Bootstrap to lose track.
+
+The most troublesome component to get right is the tooltip component which
+[must](https://getbootstrap.com/docs/5.1/components/tooltips/#overview) be explicitly initialized.
+This is the reason for the caveat mentioned [above](#serve).
