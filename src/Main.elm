@@ -111,18 +111,20 @@ viewContent model =
                  , Html.Attributes.class "nav-link"
                  , SetState Settlement |> Html.Events.onClick
                  ]
-                    ++ (if Maybe.isNothing model.computation.computed then
-                            [ Html.Attributes.class " disabled" ]
+                    ++ (case model.computation.computed of
+                            Nothing ->
+                                [ Html.Attributes.class " disabled" ]
 
-                        else
-                            []
+                            Just _ ->
+                                []
                        )
                 )
-                [ if Maybe.isNothing model.computation.computed then
-                    Html.i [] [ Html.text "Nothing to settle yet..." ]
+                [ case model.computation.computed of
+                    Nothing ->
+                        Html.i [] [ Html.text "Nothing to settle yet..." ]
 
-                  else
-                    Html.text "Settlement"
+                    Just _ ->
+                        Html.text "Settlement"
                 ]
             ]
         ]
