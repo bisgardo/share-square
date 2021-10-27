@@ -44,56 +44,63 @@ type Msg
 view : Dict Int String -> Model -> Html Msg
 view participants model =
     row
-        [ viewSummary participants model
-        , viewBalance participants model
+        [ div [ Html.Attributes.class "col" ]
+            [ Html.h3 [] [ text "Balances" ]
+            , viewBalances participants model
+            ]
+        , div [ Html.Attributes.class "col-4" ]
+            [ div [ Html.Attributes.class "card" ]
+                [ div [ Html.Attributes.class "card-header" ]
+                    [ text "Summary" ]
+                , div [ Html.Attributes.class "card-body" ]
+                    [ viewSummary participants model ]
+                ]
+            ]
         ]
 
 
 viewSummary : Dict Int String -> Model -> Html Msg
 viewSummary participants model =
-    div []
-        [ Html.h3 [] [ text "Summary" ]
-        , Html.p []
-            [ div [ Html.Attributes.class "form-check form-check-inline" ]
-                [ Html.input
-                    [ Html.Attributes.class "form-check-input"
-                    , Html.Attributes.id "computation-summary-outlay"
-                    , Html.Attributes.name "computation-summary"
-                    , Html.Attributes.type_ "radio"
-                    , model.summaryPerspective == SummaryPerspectiveOutlays |> Html.Attributes.checked
-                    , Html.Events.onCheck (SetSummaryPerspective SummaryPerspectiveOutlays |> always)
-                    ]
-                    []
-                , Html.label
-                    [ Html.Attributes.class "form-check-label"
-                    , Html.Attributes.for "computation-summary-outlay"
-                    ]
-                    [ text "Outlays" ]
+    Html.div []
+        [ div [ Html.Attributes.class "form-check form-check-inline" ]
+            [ Html.input
+                [ Html.Attributes.class "form-check-input"
+                , Html.Attributes.id "computation-summary-outlay"
+                , Html.Attributes.name "computation-summary"
+                , Html.Attributes.type_ "radio"
+                , model.summaryPerspective == SummaryPerspectiveOutlays |> Html.Attributes.checked
+                , Html.Events.onCheck (SetSummaryPerspective SummaryPerspectiveOutlays |> always)
                 ]
-            , div [ Html.Attributes.class "form-check form-check-inline" ]
-                [ Html.input
-                    [ Html.Attributes.class "form-check-input"
-                    , Html.Attributes.id "computation-summary-debt"
-                    , Html.Attributes.name "computation-summary"
-                    , Html.Attributes.type_ "radio"
-                    , model.summaryPerspective == SummaryPerspectiveDebt |> Html.Attributes.checked
-                    , Html.Events.onCheck (SetSummaryPerspective SummaryPerspectiveDebt |> always)
-                    ]
-                    []
-                , Html.label
-                    [ Html.Attributes.class "form-check-label"
-                    , Html.Attributes.for "computation-summary-debt"
-                    ]
-                    [ text "Debt" ]
+                []
+            , Html.label
+                [ Html.Attributes.class "form-check-label"
+                , Html.Attributes.for "computation-summary-outlay"
                 ]
+                [ text "Outlays" ]
             ]
+        , div [ Html.Attributes.class "form-check form-check-inline" ]
+            [ Html.input
+                [ Html.Attributes.class "form-check-input"
+                , Html.Attributes.id "computation-summary-debt"
+                , Html.Attributes.name "computation-summary"
+                , Html.Attributes.type_ "radio"
+                , model.summaryPerspective == SummaryPerspectiveDebt |> Html.Attributes.checked
+                , Html.Events.onCheck (SetSummaryPerspective SummaryPerspectiveDebt |> always)
+                ]
+                []
+            , Html.label
+                [ Html.Attributes.class "form-check-label"
+                , Html.Attributes.for "computation-summary-debt"
+                ]
+                [ text "Debt" ]
+            ]
+        , Html.hr [] []
         , case model.computed of
             Nothing ->
                 Html.p [] [ Html.em [] [ text "No result available yet." ] ]
 
             Just computed ->
-                Html.p []
-                    [ viewSummaryList participants model.summaryPerspective computed ]
+                viewSummaryList participants model.summaryPerspective computed
         ]
 
 
@@ -147,41 +154,36 @@ viewSummaryList participants perspective computed =
                     )
 
 
-viewBalance : Dict Int String -> Model -> Html Msg
-viewBalance participants model =
-    div [] <|
-        [ Html.h3 [] [ text "Balances" ]
-        , Html.p []
-            [ Html.ul []
-                (case model.computed of
-                    Nothing ->
-                        []
+viewBalances : Dict Int String -> Model -> Html Msg
+viewBalances participants model =
+    Html.ul []
+        (case model.computed of
+            Nothing ->
+                []
 
-                    Just computed ->
-                        computed.balance
-                            |> Dict.toList
-                            |> List.map
-                                (\( participantId, amount ) ->
-                                    ( lookupName participantId participants
-                                    , amount
-                                        |> Round.round 2
-                                        |> (\string ->
-                                                if String.startsWith "-" string then
-                                                    string
+            Just computed ->
+                computed.balance
+                    |> Dict.toList
+                    |> List.map
+                        (\( participantId, amount ) ->
+                            ( lookupName participantId participants
+                            , amount
+                                |> Round.round 2
+                                |> (\string ->
+                                        if String.startsWith "-" string then
+                                            string
 
-                                                else
-                                                    "+" ++ string
-                                           )
-                                    )
-                                )
-                            |> List.sort
-                            |> List.map
-                                (\( participant, amount ) ->
-                                    Html.li [] [ participant ++ ": " ++ amount |> text ]
-                                )
-                )
-            ]
-        ]
+                                        else
+                                            "+" ++ string
+                                   )
+                            )
+                        )
+                    |> List.sort
+                    |> List.map
+                        (\( participant, amount ) ->
+                            Html.li [] [ participant ++ ": " ++ amount |> text ]
+                        )
+        )
 
 
 {-| A dict from ID of payer to dict from ID of receiver to totally expensed amount.
@@ -274,7 +276,8 @@ update model msg =
                     participantIds
                         |> List.foldl
                             (\participant ->
-                                Dict.insert participant (Dict.valueSum participant expenses - Dict.valueSum participant debts)
+                                (Dict.valueSum participant expenses - Dict.valueSum participant debts)
+                                    |> Dict.insert participant
                             )
                             Dict.empty
             in
