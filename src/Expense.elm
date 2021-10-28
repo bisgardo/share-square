@@ -36,7 +36,7 @@ type Msg
 type alias Model =
     { create : Maybe CreateModel
     , expenses : List Expense
-    , participant : Participant.Model
+    , participant : Participant.Model -- TODO move back out to Main
     , nextExpenseId : Int
     }
 

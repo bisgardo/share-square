@@ -152,7 +152,7 @@ viewExpenses model =
 viewComputation : Model -> Html Msg
 viewComputation model =
     model.computation
-        |> Computation.view model.expense.participant.idToName
+        |> Computation.view model.expense.participant
         |> Html.map ComputationMsg
 
 
@@ -167,7 +167,7 @@ update msg model =
                 ( newComputationModel, newComputationCmd ) =
                     if recompute then
                         Computation.update model.computation
-                            (Computation.Recompute
+                            (Computation.RecomputeBalance
                                 (model.expense.participant.participants |> List.map .id)
                                 newExpenseModel.expenses
                             )
