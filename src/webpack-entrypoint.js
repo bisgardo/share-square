@@ -17,7 +17,8 @@ const app = Elm.Main.init({
 
 window.addEventListener('shown.bs.modal', event => {
     const modalElement = event.target;
-    modalElement.querySelector('select,input').focus();
+    const firstFormElement = modalElement.querySelector('select,input');
+    if (firstFormElement) firstFormElement.focus();
 });
 window.addEventListener('hidden.bs.modal', event => {
     const modalId = event.target.id;

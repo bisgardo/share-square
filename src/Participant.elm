@@ -114,7 +114,7 @@ viewCreateModal model =
 
                 Just createModel ->
                     ( [ textInput "Name" createModel.name CreateUpdate ]
-                    , String.isEmpty (createModel.name.value |> String.trim)
+                    , (createModel.name.value |> String.trim |> String.isEmpty)
                         || List.any isInvalid [ createModel.name ]
                     )
     in
@@ -200,7 +200,7 @@ update msg model =
 create : Int -> String -> Result String Participant
 create id name =
     -- Should probably run the name through the validator...
-    if String.isEmpty name then
+    if name |> String.isEmpty then
         Err "cannot create participant with empty name"
 
     else

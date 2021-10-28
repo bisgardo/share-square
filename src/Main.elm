@@ -8,7 +8,6 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Layout exposing (..)
-import Maybe.Extra as Maybe
 import Participant
 import Task
 
@@ -167,10 +166,11 @@ update msg model =
 
                 ( newComputationModel, newComputationCmd ) =
                     if recompute then
-                        Computation.Recompute
-                            (model.expense.participant.participants |> List.map .id)
-                            newExpenseModel.expenses
-                            |> Computation.update model.computation
+                        Computation.update model.computation
+                            (Computation.Recompute
+                                (model.expense.participant.participants |> List.map .id)
+                                newExpenseModel.expenses
+                            )
 
                     else
                         ( model.computation, Cmd.none )

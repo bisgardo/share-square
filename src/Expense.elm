@@ -6,7 +6,6 @@ import Html.Attributes exposing (class)
 import Html.Events
 import Html.Keyed
 import Layout exposing (..)
-import Maybe.Extra as Maybe
 import Participant exposing (Participant)
 import Round
 import Set exposing (Set)
@@ -136,10 +135,10 @@ initCreate initPayerId initReceiverIds =
 
 view : Model -> Html Msg
 view model =
-    row <|
+    row
         [ Html.table [ class "table" ]
             [ Html.thead []
-                [ Html.tr [] <|
+                [ Html.tr []
                     [ Html.th [] [ Html.text "#" ]
                     , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
                     , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
@@ -166,30 +165,34 @@ view model =
                                             name =
                                                 participant.name
                                         in
-                                        ( name, name |> Html.text |> List.singleton |> Html.td [] )
+                                        ( name, Html.td [] [ Html.text name ] )
                                     )
                                 |> (\htmls ->
                                         -- Ensure that there is at least 1 cell.
-                                        if List.isEmpty htmls then
-                                            [ ( "empty", Html.td [] [ Html.i [] [ "None" |> Html.text ] ] ) ]
+                                        if htmls |> List.isEmpty then
+                                            [ ( "empty", Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
 
                                         else
                                             htmls
                                    )
                            )
-                        ++ [ ( "participant-create", Html.td [ Html.Attributes.align "right" ] [ Participant.viewCreateOpen |> Html.map ParticipantMsg ] )
+                        ++ [ ( "participant-create"
+                             , Html.td [ Html.Attributes.align "right" ]
+                                [ Participant.viewCreateOpen |> Html.map ParticipantMsg ]
+                             )
                            ]
                 ]
-            , Html.Keyed.node "tbody" [] <|
+            , Html.Keyed.node "tbody"
+                []
                 (model.expenses
                     |> List.map
                         (\expense ->
                             ( expense.id
                             , Html.tr []
                                 ([ Html.td [] [ Html.text expense.id ]
-                                 , Html.td [] [ Participant.lookupName expense.payer model.participant.idToName |> Html.text ]
-                                 , Html.td [] [ expense.amount |> Round.round 2 |> Html.text ]
-                                 , Html.td [] [ expense.description |> Html.text ]
+                                 , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
+                                 , Html.td [] [ Html.text (expense.amount |> Round.round 2) ]
+                                 , Html.td [] [ Html.text expense.description ]
                                  ]
                                     ++ List.map
                                         (\participant ->
@@ -217,11 +220,10 @@ view model =
 viewCreateOpen : Model -> Html Msg
 viewCreateOpen model =
     openModalButton
-        Participant.createId
+        (createModalId ++ "-open")
         createModalId
         "Add expense"
-        [ List.isEmpty model.participant.participants
-            |> Html.Attributes.disabled
+        [ Html.Attributes.disabled (model.participant.participants |> List.isEmpty)
         , Html.Events.onClick LoadCreate
         ]
 
@@ -236,7 +238,7 @@ viewCreateModal model =
 
                 Just createModel ->
                     ( viewAdd model.participant createModel
-                    , String.isEmpty createModel.amount.value
+                    , (createModel.amount.value |> String.isEmpty)
                         || List.any isInvalid [ createModel.amount, createModel.description ]
                     )
     in
@@ -391,10 +393,10 @@ update msg model =
                                     { createModel
                                         | receivers =
                                             if checked then
-                                                Dict.insert receiverKey 1.0 createModel.receivers
+                                                createModel.receivers |> Dict.insert receiverKey 1.0
 
                                             else
-                                                Dict.remove receiverKey createModel.receivers
+                                                createModel.receivers |> Dict.remove receiverKey
                                     }
                                 )
                 }
@@ -424,11 +426,11 @@ update msg model =
 
 validateAmount : String -> Maybe String
 validateAmount amount =
-    if String.isEmpty amount then
+    if amount |> String.isEmpty then
         Nothing
 
     else
-        case String.toFloat amount of
+        case amount |> String.toFloat of
             Nothing ->
                 Just "Not a number."
 
@@ -439,7 +441,7 @@ validateAmount amount =
 validateDescription : String -> Maybe String
 validateDescription description =
     if String.length description > maxDescriptionLength then
-        Just <| "Longer than " ++ String.fromInt maxDescriptionLength ++ " characters."
+        Just ("Longer than " ++ String.fromInt maxDescriptionLength ++ " characters.")
 
     else
         Nothing

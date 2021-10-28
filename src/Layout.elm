@@ -146,7 +146,7 @@ optionSelected condition =
 
 textInput : String -> Validated Field -> (String -> msg) -> Html msg
 textInput label field tagger =
-    div [ class "row mb-3" ] <|
+    div [ class "row mb-3" ]
         [ Html.label [ class "col-sm-3 col-form-label", Html.Attributes.for field.key ] [ text label ]
         , div [ class "col-sm-9" ] <|
             [ Html.input
@@ -156,15 +156,12 @@ textInput label field tagger =
                  , onInput tagger
                  , Html.Attributes.value field.value
                  ]
-                    ++ validation field.validationError (class "is-invalid" |> always)
+                    ++ validation field.validationError (always <| class "is-invalid")
                 )
                 []
             ]
                 ++ validation field.validationError
-                    (\msg ->
-                        div [ class "invalid-feedback" ]
-                            [ text msg ]
-                    )
+                    (\msg -> div [ class "invalid-feedback" ] [ text msg ])
         ]
 
 

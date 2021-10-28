@@ -69,7 +69,7 @@ viewSummary participants model =
                 , Html.Attributes.name "computation-summary"
                 , Html.Attributes.type_ "radio"
                 , model.summaryPerspective == SummaryPerspectiveOutlays |> Html.Attributes.checked
-                , Html.Events.onCheck (SetSummaryPerspective SummaryPerspectiveOutlays |> always)
+                , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveOutlays)
                 ]
                 []
             , Html.label
@@ -84,8 +84,8 @@ viewSummary participants model =
                 , Html.Attributes.id "computation-summary-debt"
                 , Html.Attributes.name "computation-summary"
                 , Html.Attributes.type_ "radio"
-                , model.summaryPerspective == SummaryPerspectiveDebt |> Html.Attributes.checked
-                , Html.Events.onCheck (SetSummaryPerspective SummaryPerspectiveDebt |> always)
+                , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveDebt)
+                , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveDebt)
                 ]
                 []
             , Html.label
@@ -108,7 +108,7 @@ viewSummaryList : Dict Int String -> SummaryPerspective -> ComputedModel -> Html
 viewSummaryList participants perspective computed =
     case perspective of
         SummaryPerspectiveOutlays ->
-            if Dict.isEmpty computed.expenses then
+            if computed.expenses |> Dict.isEmpty then
                 Html.p [] [ Html.i [] [ text "None." ] ]
 
             else
@@ -131,7 +131,7 @@ viewSummaryList participants perspective computed =
                     )
 
         SummaryPerspectiveDebt ->
-            if Dict.isEmpty computed.debts then
+            if computed.debts |> Dict.isEmpty then
                 Html.p [] [ Html.i [] [ text "None." ] ]
 
             else
@@ -148,8 +148,7 @@ viewSummaryList participants perspective computed =
                         |> List.sort
                         |> List.map
                             (\( receiver, payer, amount ) ->
-                                Html.li []
-                                    [ receiver ++ " owes " ++ payer ++ " " ++ amount ++ "." |> text ]
+                                Html.li [] [ text (receiver ++ " owes " ++ payer ++ " " ++ amount ++ ".") ]
                             )
                     )
 
@@ -170,7 +169,7 @@ viewBalances participants model =
                             , amount
                                 |> Round.round 2
                                 |> (\string ->
-                                        if String.startsWith "-" string then
+                                        if string |> String.startsWith "-" then
                                             string
 
                                         else
@@ -181,7 +180,7 @@ viewBalances participants model =
                     |> List.sort
                     |> List.map
                         (\( participant, amount ) ->
-                            Html.li [] [ participant ++ ": " ++ amount |> text ]
+                            Html.li [] [ text (participant ++ ": " ++ amount) ]
                         )
         )
 
@@ -217,11 +216,12 @@ expensesFromList =
                                     innerResult
 
                                 else
-                                    Dict.insert receiver (amount * expense.amount / weightSum) innerResult
+                                    innerResult
+                                        |> Dict.insert receiver (amount * expense.amount / weightSum)
                             )
                             Dict.empty
             in
-            if Dict.isEmpty weightedDebt then
+            if weightedDebt |> Dict.isEmpty then
                 -- Ignore entry if the payer is the only receiver of the expense.
                 outerResult
 
@@ -244,11 +244,7 @@ invert =
                 (\receiver amount ->
                     Dict.update receiver
                         (Maybe.withDefault Dict.empty
-                            >> Dict.update payer
-                                (Maybe.withDefault 0
-                                    >> (+) amount
-                                    >> Just
-                                )
+                            >> Dict.update payer (Maybe.withDefault 0 >> (+) amount >> Just)
                             >> Just
                         )
                 )
