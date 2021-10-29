@@ -7,9 +7,9 @@ import Html.Events
 import Html.Keyed
 import Layout exposing (..)
 import Participant exposing (Participant)
-import Round
 import Set exposing (Set)
 import Util.Dict as Dict
+import Util.String as String
 import Util.Update as Update
 
 
@@ -189,7 +189,7 @@ view model =
                             , Html.tr []
                                 ([ Html.td [] [ Html.text expense.id ]
                                  , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
-                                 , Html.td [] [ Html.text (expense.amount |> Round.round 2) ]
+                                 , Html.td [] [ Html.text (expense.amount |> String.fromAmount) ]
                                  , Html.td [] [ Html.text expense.description ]
                                  ]
                                     ++ List.map

@@ -9,8 +9,8 @@ import Html.Keyed
 import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
-import Round
 import Util.Dict as Dict
+import Util.String as String
 import Util.Update as Update
 
 
@@ -172,7 +172,7 @@ viewPayments participantModel model =
                                 [ Html.td [] [ Html.text payment.id ]
                                 , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
                                 , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
-                                , Html.td [] [ Html.text (payment.amount |> Round.round 2) ]
+                                , Html.td [] [ Html.text (payment.amount |> String.fromAmount) ]
                                 ]
                             )
                         )
@@ -285,7 +285,7 @@ viewSummaryList participants perspective computed =
                             (\( payer, receiver, amount ) ->
                                 ( lookupName payer participants
                                 , lookupName receiver participants
-                                , amount |> Round.round 2
+                                , amount |> String.fromAmount
                                 )
                             )
                         |> List.sort
@@ -308,7 +308,7 @@ viewSummaryList participants perspective computed =
                             (\( receiver, payer, amount ) ->
                                 ( lookupName receiver participants
                                 , lookupName payer participants
-                                , amount |> Round.round 2
+                                , amount |> String.fromAmount
                                 )
                             )
                         |> List.sort
@@ -335,19 +335,23 @@ viewBalances participants model =
                     (.balance
                         >> Dict.toList
                         >> List.map
-                            (\( participantId, amount ) ->
+                            (\( participantId, expendedAmount ) ->
+                            
+                                let
+                                    participantName =
+                                        lookupName participantId participants
+
+                                    paymentBalance =
+                                        model.paymentBalance
+                                            |> Dict.get participantId
+                                            |> Maybe.withDefault 0
+
+                                    totalBalance =
+                                        expendedAmount + paymentBalance
+                                in
                                 ( lookupName participantId participants
                                 , participantId
-                                , amount
-                                    + (model.paymentBalance |> Dict.get participantId |> Maybe.withDefault 0)
-                                    |> Round.round 2
-                                    |> (\string ->
-                                            if string |> String.startsWith "-" then
-                                                string
-
-                                            else
-                                                "+" ++ string
-                                       )
+                                , totalBalance |> String.fromAmountSigned
                                 )
                             )
                         -- Sort by name, then ID.
