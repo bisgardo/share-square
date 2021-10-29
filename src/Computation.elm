@@ -324,8 +324,8 @@ viewBalances participants model =
     Html.table [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
-                [ Html.th [Html.Attributes.scope "col"] [ Html.text "Participant" ]
-                , Html.th [Html.Attributes.scope "col"] [ Html.text "Balance" ]
+                [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Balance" ]
                 ]
             ]
         , Html.Keyed.node "tbody"
@@ -336,7 +336,6 @@ viewBalances participants model =
                         >> Dict.toList
                         >> List.map
                             (\( participantId, expendedAmount ) ->
-                            
                                 let
                                     participantName =
                                         lookupName participantId participants
