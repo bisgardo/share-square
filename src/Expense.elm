@@ -135,11 +135,11 @@ initCreate initPayerId initReceiverIds =
 
 view : Model -> Html Msg
 view model =
-    row
+    Html.div []
         [ Html.table [ class "table" ]
             [ Html.thead []
                 [ Html.tr []
-                    [ Html.th [] [ Html.text "#" ]
+                    [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
                     , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
                     , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
                     , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Description" ]
@@ -151,7 +151,7 @@ view model =
                     , Html.td [] []
                     ]
 
-                -- Using keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
+                -- Must use keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
                 , Html.Keyed.node "tr" [] <|
                     [ ( "id", Html.td [] [] )
                     , ( "payer", Html.td [] [] )
@@ -161,11 +161,9 @@ view model =
                         ++ (model.participant.participants
                                 |> List.map
                                     (\participant ->
-                                        let
-                                            name =
-                                                participant.name
-                                        in
-                                        ( name, Html.td [] [ Html.text name ] )
+                                        ( participant.id |> String.fromInt
+                                        , Html.td [] [ Html.text participant.name ]
+                                        )
                                     )
                                 |> (\htmls ->
                                         -- Ensure that there is at least 1 cell.

@@ -5,7 +5,9 @@ import Expense exposing (Expense)
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
+import Html.Keyed
 import Layout exposing (..)
+import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
 import Round
 import Util.Dict as Dict
@@ -21,6 +23,7 @@ type alias Model =
     , summaryPerspective : SummaryPerspective
     , computed : Maybe ComputedModel
     , payments : List Payment
+    , paymentBalance : Dict Int Float
     , nextPaymentId : Int
     }
 
@@ -62,10 +65,10 @@ create id model =
                     Ok amount
     in
     Result.map3
-        (\payerId receiver amount ->
+        (\payerId receiverId amount ->
             { id = id |> String.fromInt
             , payer = payerId
-            , receiver = receiver
+            , receiver = receiverId
             , amount = amount
             }
         )
@@ -80,6 +83,7 @@ init =
     , summaryPerspective = SummaryPerspectiveOutlays
     , computed = Nothing
     , payments = []
+    , paymentBalance = Dict.empty
     , nextPaymentId = 1
     }
 
@@ -148,26 +152,29 @@ view participantModel model =
 
 viewPayments : Participant.Model -> Model -> Html Msg
 viewPayments participantModel model =
-    row <|
+    div [] <|
         [ Html.table [ Html.Attributes.class "table" ]
             [ Html.thead []
                 [ Html.tr []
-                    [ Html.th [] [ Html.text "#" ]
+                    [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
                     , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
                     , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
                     , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
                     ]
                 ]
-            , Html.tbody []
+            , Html.Keyed.node "tbody"
+                []
                 (model.payments
                     |> List.map
                         (\payment ->
-                            Html.tr []
+                            ( payment.id
+                            , Html.tr []
                                 [ Html.td [] [ Html.text payment.id ]
                                 , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
                                 , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
                                 , Html.td [] [ Html.text (payment.amount |> Round.round 2) ]
                                 ]
+                            )
                         )
                 )
             ]
@@ -314,34 +321,46 @@ viewSummaryList participants perspective computed =
 
 viewBalances : Dict Int String -> Model -> Html Msg
 viewBalances participants model =
-    Html.ul []
-        (case model.computed of
-            Nothing ->
-                []
+    Html.table [ Html.Attributes.class "table" ]
+        [ Html.thead []
+            [ Html.tr []
+                [ Html.th [Html.Attributes.scope "col"] [ Html.text "Participant" ]
+                , Html.th [Html.Attributes.scope "col"] [ Html.text "Balance" ]
+                ]
+            ]
+        , Html.Keyed.node "tbody"
+            []
+            (model.computed
+                |> Maybe.unwrap []
+                    (.balance
+                        >> Dict.toList
+                        >> List.map
+                            (\( participantId, amount ) ->
+                                ( lookupName participantId participants
+                                , participantId
+                                , amount
+                                    + (model.paymentBalance |> Dict.get participantId |> Maybe.withDefault 0)
+                                    |> Round.round 2
+                                    |> (\string ->
+                                            if string |> String.startsWith "-" then
+                                                string
 
-            Just computed ->
-                computed.balance
-                    |> Dict.toList
-                    |> List.map
-                        (\( participantId, amount ) ->
-                            ( lookupName participantId participants
-                            , amount
-                                |> Round.round 2
-                                |> (\string ->
-                                        if string |> String.startsWith "-" then
-                                            string
-
-                                        else
-                                            "+" ++ string
-                                   )
+                                            else
+                                                "+" ++ string
+                                       )
+                                )
                             )
-                        )
-                    |> List.sort
-                    |> List.map
-                        (\( participant, amount ) ->
-                            Html.li [] [ text (participant ++ ": " ++ amount) ]
-                        )
-        )
+                        -- Sort by name, then ID.
+                        >> List.sort
+                        >> List.map
+                            (\( participantName, participantId, amount ) ->
+                                ( participantId |> String.fromInt
+                                , Html.tr [] [ Html.td [] [ text participantName ], Html.td [] [ text amount ] ]
+                                )
+                            )
+                    )
+            )
+        ]
 
 
 {-| A dict from ID of payer to dict from ID of receiver to totally expensed amount.
@@ -515,12 +534,12 @@ update model msg =
                 id =
                     model.nextPaymentId
 
-                payment =
+                result =
                     model.create
                         |> Result.fromMaybe "no create model found"
                         |> Result.andThen (create id)
             in
-            case payment of
+            case result of
                 Err error ->
                     -- TODO Print error on page.
                     let
@@ -529,10 +548,22 @@ update model msg =
                     in
                     ( model, Cmd.none )
 
-                Ok value ->
+                Ok payment ->
                     ( { model
                         | payments =
-                            model.payments ++ [ value ]
+                            model.payments ++ [ payment ]
+                        , paymentBalance =
+                            model.paymentBalance
+                                |> Dict.update payment.payer
+                                    (Maybe.withDefault 0
+                                        >> (\payerBalance -> payerBalance + payment.amount)
+                                        >> Just
+                                    )
+                                |> Dict.update payment.receiver
+                                    (Maybe.withDefault 0
+                                        >> (\receiverBalance -> receiverBalance - payment.amount)
+                                        >> Just
+                                    )
                         , nextPaymentId = id + 1
                       }
                     , Update.delegate CloseModal
