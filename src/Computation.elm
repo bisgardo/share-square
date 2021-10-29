@@ -325,7 +325,9 @@ viewBalances participants model =
         [ Html.thead []
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
-                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Balance" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Expended" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Paid" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Remaining balance" ]
                 ]
             ]
         , Html.Keyed.node "tbody"
@@ -350,15 +352,23 @@ viewBalances participants model =
                                 in
                                 ( participantName
                                 , participantId
-                                , totalBalance |> String.fromAmountSigned
+                                , ( expendedAmount |> String.fromAmountSigned
+                                  , paymentBalance |> String.fromAmountSigned
+                                  , totalBalance |> String.fromAmountSigned
+                                  )
                                 )
                             )
-                        -- Sort by name, then ID.
+                        -- Sort by name, then ID (though names should be unique).
                         >> List.sort
                         >> List.map
-                            (\( participantName, participantId, amount ) ->
+                            (\( participantName, participantId, ( expendedAmount, paymentBalance, totalBalance ) ) ->
                                 ( participantId |> String.fromInt
-                                , Html.tr [] [ Html.td [] [ text participantName ], Html.td [] [ text amount ] ]
+                                , Html.tr []
+                                    [ Html.td [] [ text participantName ]
+                                    , Html.td [] [ text expendedAmount ]
+                                    , Html.td [] [ text paymentBalance ]
+                                    , Html.td [] [ text totalBalance ]
+                                    ]
                                 )
                             )
                     )
