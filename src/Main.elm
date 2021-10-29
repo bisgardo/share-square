@@ -80,66 +80,67 @@ view model =
 
 viewBody : Model -> Html Msg
 viewBody model =
-    container <|
+    container
         [ Html.div [ Html.Attributes.class "mb-4" ]
             [ Html.h1 [ Html.Attributes.class "d-inline" ] [ Html.text "Share 'n square" ]
             , Html.p [ Html.Attributes.class "lead d-inline ms-2" ] [ Html.text "Expense calculator" ]
             ]
+        , viewContent model
         ]
-            ++ viewContent model
 
 
-viewContent : Model -> List (Html Msg)
+viewContent : Model -> Html Msg
 viewContent model =
-    [ Html.ul [ Html.Attributes.class "nav nav-tabs mb-2" ]
-        [ Html.li [ Html.Attributes.class "nav-item" ]
-            [ Html.button
-                [ Html.Attributes.type_ "button"
-                , data "bs-toggle" "tab"
-                , data "bs-target" ("#" ++ tabIds.expenses)
-                , Html.Attributes.class "nav-link active"
-                , SetState Expenses |> Html.Events.onClick
+    Html.div []
+        [ Html.ul [ Html.Attributes.class "nav nav-tabs mb-2" ]
+            [ Html.li [ Html.Attributes.class "nav-item" ]
+                [ Html.button
+                    [ Html.Attributes.type_ "button"
+                    , data "bs-toggle" "tab"
+                    , data "bs-target" ("#" ++ tabIds.expenses)
+                    , Html.Attributes.class "nav-link active"
+                    , SetState Expenses |> Html.Events.onClick
+                    ]
+                    [ Html.text "Expenses" ]
                 ]
-                [ Html.text "Expenses" ]
+            , Html.li [ Html.Attributes.class "nav-item" ]
+                [ Html.button
+                    ([ Html.Attributes.type_ "button"
+                     , data "bs-toggle" "tab"
+                     , data "bs-target" ("#" ++ tabIds.settlement)
+                     , Html.Attributes.class "nav-link"
+                     , SetState Settlement |> Html.Events.onClick
+                     ]
+                        ++ (case model.computation.computed of
+                                Nothing ->
+                                    [ Html.Attributes.class " disabled" ]
+
+                                Just _ ->
+                                    []
+                           )
+                    )
+                    [ case model.computation.computed of
+                        Nothing ->
+                            Html.i [] [ Html.text "Nothing to settle yet..." ]
+
+                        Just _ ->
+                            Html.text "Settlement"
+                    ]
+                ]
             ]
-        , Html.li [ Html.Attributes.class "nav-item" ]
-            [ Html.button
-                ([ Html.Attributes.type_ "button"
-                 , data "bs-toggle" "tab"
-                 , data "bs-target" ("#" ++ tabIds.settlement)
-                 , Html.Attributes.class "nav-link"
-                 , SetState Settlement |> Html.Events.onClick
-                 ]
-                    ++ (case model.computation.computed of
-                            Nothing ->
-                                [ Html.Attributes.class " disabled" ]
-
-                            Just _ ->
-                                []
-                       )
-                )
-                [ case model.computation.computed of
-                    Nothing ->
-                        Html.i [] [ Html.text "Nothing to settle yet..." ]
-
-                    Just _ ->
-                        Html.text "Settlement"
+        , Html.div [ Html.Attributes.class "tab-content" ]
+            [ Html.div
+                [ Html.Attributes.id tabIds.expenses
+                , Html.Attributes.class "tab-pane fade active show"
                 ]
+                [ viewExpenses model ]
+            , Html.div
+                [ Html.Attributes.id tabIds.settlement
+                , Html.Attributes.class "tab-pane fade"
+                ]
+                [ viewComputation model ]
             ]
         ]
-    , Html.div [ Html.Attributes.class "tab-content" ]
-        [ Html.div
-            [ Html.Attributes.id tabIds.expenses
-            , Html.Attributes.class "tab-pane fade active show"
-            ]
-            [ viewExpenses model ]
-        , Html.div
-            [ Html.Attributes.id tabIds.settlement
-            , Html.Attributes.class "tab-pane fade"
-            ]
-            [ viewComputation model ]
-        ]
-    ]
 
 
 viewExpenses : Model -> Html Msg
@@ -152,7 +153,7 @@ viewExpenses model =
 viewComputation : Model -> Html Msg
 viewComputation model =
     model.computation
-        |> Computation.view model.expense.participant.idToName
+        |> Computation.view model.expense.participant
         |> Html.map ComputationMsg
 
 
@@ -167,7 +168,7 @@ update msg model =
                 ( newComputationModel, newComputationCmd ) =
                     if recompute then
                         Computation.update model.computation
-                            (Computation.Recompute
+                            (Computation.RecomputeBalance
                                 (model.expense.participant.participants |> List.map .id)
                                 newExpenseModel.expenses
                             )

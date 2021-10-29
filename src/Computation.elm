@@ -5,22 +5,98 @@ import Expense exposing (Expense)
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
+import Html.Keyed
 import Layout exposing (..)
+import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
-import Round
 import Util.Dict as Dict
+import Util.String as String
+import Util.Update as Update
+
+
+createModalId =
+    "payment-create"
 
 
 type alias Model =
-    { summaryPerspective : SummaryPerspective
+    { create : Maybe CreateModel
+    , summaryPerspective : SummaryPerspective
     , computed : Maybe ComputedModel
+    , payments : List Payment
+    , paymentBalance : Dict Int Float
+    , nextPaymentId : Int
     }
+
+
+type alias Payment =
+    { id : String
+    , payer : Int
+    , receiver : Int
+    , amount : Float
+    }
+
+
+create : Int -> CreateModel -> Result String Payment
+create id model =
+    -- Should probably run values though their validators...
+    let
+        payerResult =
+            case model.payerId |> String.toInt of
+                Nothing ->
+                    Err ("unexpected non-integer key '" ++ model.payerId ++ "' of payer")
+
+                Just payerId ->
+                    Ok payerId
+
+        receiverResult =
+            case model.receiverId |> String.toInt of
+                Nothing ->
+                    Err ("unexpected non-integer key '" ++ model.receiverId ++ "' of receiver")
+
+                Just payerId ->
+                    Ok payerId
+
+        amountResult =
+            case model.amount.value |> String.toFloat of
+                Nothing ->
+                    Err ("cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number")
+
+                Just amount ->
+                    Ok amount
+    in
+    Result.map3
+        (\payerId receiverId amount ->
+            { id = id |> String.fromInt
+            , payer = payerId
+            , receiver = receiverId
+            , amount = amount
+            }
+        )
+        payerResult
+        receiverResult
+        amountResult
 
 
 init : Model
 init =
-    { summaryPerspective = SummaryPerspectiveOutlays
+    { create = Nothing
+    , summaryPerspective = SummaryPerspectiveOutlays
     , computed = Nothing
+    , payments = []
+    , paymentBalance = Dict.empty
+    , nextPaymentId = 1
+    }
+
+
+initCreate : String -> CreateModel
+initCreate initId =
+    { payerId = initId
+    , receiverId = initId
+    , amount =
+        { key = "payment-create-amount"
+        , value = ""
+        , validationError = Nothing
+        }
     }
 
 
@@ -31,6 +107,13 @@ type alias ComputedModel =
     }
 
 
+type alias CreateModel =
+    { payerId : String
+    , receiverId : String
+    , amount : Validated Field
+    }
+
+
 type SummaryPerspective
     = SummaryPerspectiveOutlays
     | SummaryPerspectiveDebt
@@ -38,25 +121,108 @@ type SummaryPerspective
 
 type Msg
     = SetSummaryPerspective SummaryPerspective
-    | Recompute (List Int) (List Expense)
+    | RecomputeBalance (List Int) (List Expense)
+    | LoadCreate (List Int)
+    | CloseModal
+    | CreatePaymentEditPayer String
+    | CreatePaymentEditReceiver String
+    | CreatePaymentEditAmount String
+    | CreatePaymentSubmit
 
 
-view : Dict Int String -> Model -> Html Msg
-view participants model =
+view : Participant.Model -> Model -> Html Msg
+view participantModel model =
     row
         [ div [ Html.Attributes.class "col" ]
-            [ Html.h3 [] [ text "Balances" ]
-            , viewBalances participants model
+            [ Html.h3 [] [ text "Payments" ]
+            , viewPayments participantModel model
+            , Html.h3 [] [ text "Balances" ]
+            , viewBalances participantModel.idToName model
             ]
         , div [ Html.Attributes.class "col-4" ]
             [ div [ Html.Attributes.class "card" ]
                 [ div [ Html.Attributes.class "card-header" ]
-                    [ text "Summary" ]
+                    [ text "Summary (before payments)" ]
                 , div [ Html.Attributes.class "card-body" ]
-                    [ viewSummary participants model ]
+                    [ viewSummary participantModel.idToName model ]
                 ]
             ]
         ]
+
+
+viewPayments : Participant.Model -> Model -> Html Msg
+viewPayments participantModel model =
+    div [] <|
+        [ Html.table [ Html.Attributes.class "table" ]
+            [ Html.thead []
+                [ Html.tr []
+                    [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
+                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
+                    ]
+                ]
+            , Html.Keyed.node "tbody"
+                []
+                (model.payments
+                    |> List.map
+                        (\payment ->
+                            ( payment.id
+                            , Html.tr []
+                                [ Html.td [] [ Html.text payment.id ]
+                                , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
+                                , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
+                                , Html.td [] [ Html.text (payment.amount |> String.fromAmount) ]
+                                ]
+                            )
+                        )
+                )
+            ]
+        , viewCreateOpen participantModel
+        , viewCreateModal participantModel model
+        ]
+
+
+viewCreateOpen : Participant.Model -> Html Msg
+viewCreateOpen participantModel =
+    openModalButton
+        (createModalId ++ "-open")
+        createModalId
+        "Add payment"
+        [ Html.Attributes.disabled (participantModel.participants |> List.isEmpty)
+        , Html.Events.onClick (participantModel.participants |> List.map .id |> LoadCreate)
+        ]
+
+
+viewCreateModal : Participant.Model -> Model -> Html Msg
+viewCreateModal participantModel model =
+    let
+        ( body, disable ) =
+            case model.create of
+                Nothing ->
+                    ( [ Html.text "Loading..." ], True )
+
+                Just createModel ->
+                    ( viewAdd participantModel createModel
+                    , String.isEmpty createModel.amount.value
+                        || List.any isInvalid [ createModel.amount ]
+                    )
+    in
+    Html.form
+        [ Html.Events.onSubmit CreatePaymentSubmit ]
+        [ modal createModalId "Add payment" body disable ]
+
+
+viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
+viewAdd participantModel model =
+    let
+        participantsFields =
+            List.map Participant.toField participantModel.participants
+    in
+    [ optionsInput "new-payments-payer" "Payer" participantsFields model.payerId CreatePaymentEditPayer
+    , optionsInput "new-payments-receiver" "Receiver" participantsFields model.receiverId CreatePaymentEditReceiver
+    , textInput "Amount" model.amount CreatePaymentEditAmount
+    ]
 
 
 viewSummary : Dict Int String -> Model -> Html Msg
@@ -68,7 +234,7 @@ viewSummary participants model =
                 , Html.Attributes.id "computation-summary-outlay"
                 , Html.Attributes.name "computation-summary"
                 , Html.Attributes.type_ "radio"
-                , model.summaryPerspective == SummaryPerspectiveOutlays |> Html.Attributes.checked
+                , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveOutlays)
                 , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveOutlays)
                 ]
                 []
@@ -119,7 +285,7 @@ viewSummaryList participants perspective computed =
                             (\( payer, receiver, amount ) ->
                                 ( lookupName payer participants
                                 , lookupName receiver participants
-                                , amount |> Round.round 2
+                                , amount |> String.fromAmount
                                 )
                             )
                         |> List.sort
@@ -142,7 +308,7 @@ viewSummaryList participants perspective computed =
                             (\( receiver, payer, amount ) ->
                                 ( lookupName receiver participants
                                 , lookupName payer participants
-                                , amount |> Round.round 2
+                                , amount |> String.fromAmount
                                 )
                             )
                         |> List.sort
@@ -155,34 +321,49 @@ viewSummaryList participants perspective computed =
 
 viewBalances : Dict Int String -> Model -> Html Msg
 viewBalances participants model =
-    Html.ul []
-        (case model.computed of
-            Nothing ->
-                []
+    Html.table [ Html.Attributes.class "table" ]
+        [ Html.thead []
+            [ Html.tr []
+                [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Balance" ]
+                ]
+            ]
+        , Html.Keyed.node "tbody"
+            []
+            (model.computed
+                |> Maybe.unwrap []
+                    (.balance
+                        >> Dict.toList
+                        >> List.map
+                            (\( participantId, expendedAmount ) ->
+                                let
+                                    participantName =
+                                        lookupName participantId participants
 
-            Just computed ->
-                computed.balance
-                    |> Dict.toList
-                    |> List.map
-                        (\( participantId, amount ) ->
-                            ( lookupName participantId participants
-                            , amount
-                                |> Round.round 2
-                                |> (\string ->
-                                        if string |> String.startsWith "-" then
-                                            string
+                                    paymentBalance =
+                                        model.paymentBalance
+                                            |> Dict.get participantId
+                                            |> Maybe.withDefault 0
 
-                                        else
-                                            "+" ++ string
-                                   )
+                                    totalBalance =
+                                        expendedAmount + paymentBalance
+                                in
+                                ( lookupName participantId participants
+                                , participantId
+                                , totalBalance |> String.fromAmountSigned
+                                )
                             )
-                        )
-                    |> List.sort
-                    |> List.map
-                        (\( participant, amount ) ->
-                            Html.li [] [ text (participant ++ ": " ++ amount) ]
-                        )
-        )
+                        -- Sort by name, then ID.
+                        >> List.sort
+                        >> List.map
+                            (\( participantName, participantId, amount ) ->
+                                ( participantId |> String.fromInt
+                                , Html.tr [] [ Html.td [] [ text participantName ], Html.td [] [ text amount ] ]
+                                )
+                            )
+                    )
+            )
+        ]
 
 
 {-| A dict from ID of payer to dict from ID of receiver to totally expensed amount.
@@ -260,7 +441,7 @@ update model msg =
         SetSummaryPerspective value ->
             ( { model | summaryPerspective = value }, Cmd.none )
 
-        Recompute participantIds expenseList ->
+        RecomputeBalance participantIds expenseList ->
             let
                 expenses =
                     expensesFromList expenseList
@@ -287,3 +468,106 @@ update model msg =
               }
             , Cmd.none
             )
+
+        LoadCreate participants ->
+            ( { model
+                | create =
+                    participants
+                        |> List.head
+                        |> Maybe.map
+                            (\firstParticipant ->
+                                initCreate
+                                    (firstParticipant |> String.fromInt)
+                            )
+              }
+            , Cmd.none
+            )
+
+        CloseModal ->
+            ( model, closeModal createModalId )
+
+        CreatePaymentEditPayer payerId ->
+            ( { model
+                | create =
+                    model.create
+                        |> Maybe.map
+                            (\createModel ->
+                                { createModel | payerId = payerId }
+                            )
+              }
+            , Cmd.none
+            )
+
+        CreatePaymentEditReceiver receiverId ->
+            ( { model
+                | create =
+                    model.create
+                        |> Maybe.map
+                            (\createModel ->
+                                { createModel | receiverId = receiverId }
+                            )
+              }
+            , Cmd.none
+            )
+
+        CreatePaymentEditAmount amount ->
+            ( { model
+                | create =
+                    model.create
+                        |> Maybe.map
+                            (\createModel ->
+                                let
+                                    amountField =
+                                        createModel.amount
+                                in
+                                { createModel
+                                    | amount =
+                                        { amountField
+                                            | value = amount
+                                            , validationError = Expense.validateAmount amount
+                                        }
+                                }
+                            )
+              }
+            , Cmd.none
+            )
+
+        CreatePaymentSubmit ->
+            let
+                id =
+                    model.nextPaymentId
+
+                result =
+                    model.create
+                        |> Result.fromMaybe "no create model found"
+                        |> Result.andThen (create id)
+            in
+            case result of
+                Err error ->
+                    -- TODO Print error on page.
+                    let
+                        _ =
+                            Debug.log "error" error
+                    in
+                    ( model, Cmd.none )
+
+                Ok payment ->
+                    ( { model
+                        | payments =
+                            model.payments ++ [ payment ]
+                        , paymentBalance =
+                            model.paymentBalance
+                                |> Dict.update payment.payer
+                                    (Maybe.withDefault 0
+                                        >> (\payerBalance -> payerBalance + payment.amount)
+                                        >> Just
+                                    )
+                                |> Dict.update payment.receiver
+                                    (Maybe.withDefault 0
+                                        >> (\receiverBalance -> receiverBalance - payment.amount)
+                                        >> Just
+                                    )
+                        , nextPaymentId = id + 1
+                      }
+                    , Update.delegate CloseModal
+                    )
