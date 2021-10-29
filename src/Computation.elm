@@ -348,7 +348,7 @@ viewBalances participants model =
                                     totalBalance =
                                         expendedAmount + paymentBalance
                                 in
-                                ( lookupName participantId participants
+                                ( participantName
                                 , participantId
                                 , totalBalance |> String.fromAmountSigned
                                 )
