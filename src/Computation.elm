@@ -1,14 +1,17 @@
 module Computation exposing (..)
 
+import Browser.Dom as Dom
 import Dict exposing (Dict)
 import Expense exposing (Expense)
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
 import Html.Keyed
+import Json.Decode
 import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
+import Task
 import Util.Dict as Dict
 import Util.String as String
 import Util.Update as Update
@@ -129,7 +132,9 @@ type Msg
     | CreatePaymentEditPayer String
     | CreatePaymentEditReceiver String
     | CreatePaymentEditAmount String
+    | CreatePaymentApplySuggestedAmount Float
     | CreatePaymentSubmit
+    | DomMsg (Result Dom.Error ())
 
 
 view : Participant.Model -> Model -> Html Msg
@@ -224,7 +229,6 @@ viewAdd participantModel model =
     in
     [ optionsInput "new-payments-payer" "Payer" participantsFields model.payerId CreatePaymentEditPayer
     , optionsInput "new-payments-receiver" "Receiver" participantsFields model.receiverId CreatePaymentEditReceiver
-    , textInput "Amount" model.amount CreatePaymentEditAmount
     , div [ Html.Attributes.class "row mb-3" ]
         [ Html.div [ Html.Attributes.class "col-sm-3" ] []
         , div [ Html.Attributes.class "col-sm-9" ] <|
@@ -241,23 +245,24 @@ viewAdd participantModel model =
                         ]
                     ]
 
-                Ok value ->
-                    if value == (model.amount.value |> String.toFloat |> Maybe.withDefault 0) then
+                Ok amount ->
+                    if amount == (model.amount.value |> String.toFloat |> Maybe.withDefault 0) then
                         -- Amount is already the suggested value.
                         []
 
                     else
-                        let
-                            amount =
-                                value |> String.fromAmount
-                        in
                         [ Html.a
+                            -- Need to set href "#" to render the link correctly,
+                            -- but then "prevent default" also needs to be enabled to actually prevent a URL change.
+                            -- I'm puzzled why JSON decoding is required to do this, but that seems to be the case...
                             [ Html.Attributes.href "#"
-                            , Html.Events.onClick (CreatePaymentEditAmount amount)
+                            , Html.Events.preventDefaultOn "click"
+                                (Json.Decode.succeed ( CreatePaymentApplySuggestedAmount amount, True ))
                             ]
-                            [ text <| "Suggestested: " ++ amount ]
+                            [ text <| "Suggestested amount: " ++ (amount |> String.fromAmount) ]
                         ]
         ]
+    , textInput "Amount" model.amount CreatePaymentEditAmount
     ]
 
 
@@ -589,6 +594,19 @@ update msg model =
             , Cmd.none
             )
 
+        CreatePaymentApplySuggestedAmount amount ->
+            ( model
+            , case model.create of
+                Nothing ->
+                    Cmd.none
+
+                Just createModel ->
+                    Dom.focus createModel.amount.key |> Task.attempt DomMsg
+            )
+                |> Update.chain
+                    (amount |> String.fromAmount |> CreatePaymentEditAmount)
+                    update
+
         CreatePaymentSubmit ->
             let
                 id =
@@ -628,6 +646,18 @@ update msg model =
                       }
                     , Update.delegate CloseModal
                     )
+
+        DomMsg result ->
+            let
+                _ =
+                    case result of
+                        Err (Dom.NotFound id) ->
+                            Debug.log "DOM error: Element not found" id
+
+                        Ok () ->
+                            ""
+            in
+            ( model, Cmd.none )
 
 
 type NoSuggestedAmountReason
