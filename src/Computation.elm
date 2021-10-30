@@ -112,7 +112,7 @@ type alias CreateModel =
     { payerId : String
     , receiverId : String
     , amount : Validated Field
-    , suggestedAmount : Maybe Float
+    , suggestedAmount : Maybe (Result String Float)
     }
 
 
@@ -130,6 +130,7 @@ type Msg
     | CreatePaymentEditReceiver String
     | CreatePaymentEditAmount String
     | CreatePaymentSubmit
+    | CreatePaymentApplySuggestedAmount Float
 
 
 view : Participant.Model -> Model -> Html Msg
@@ -227,10 +228,23 @@ viewAdd participantModel model =
     , textInput "Amount" model.amount CreatePaymentEditAmount
     , div [ Html.Attributes.class "row mb-3" ]
         [ Html.div [ Html.Attributes.class "col-sm-3" ] []
-        , div [ Html.Attributes.class "col-sm-9" ]
-            [ text <| "Suggestested: "
-            , Html.a [] [ text <| (model.suggestedAmount |> Maybe.withDefault 0 |> String.fromAmount) ]
-            ]
+        , div [ Html.Attributes.class "col-sm-9" ] <|
+            case model.suggestedAmount of
+                Nothing ->
+                    []
+
+                Just suggestedAmount ->
+                    case suggestedAmount of
+                        Err message ->
+                            [ Html.i [] [ text message ] ]
+
+                        Ok amount ->
+                            [ Html.a
+                                [ Html.Attributes.href "#"
+                                , Html.Events.onClick (CreatePaymentApplySuggestedAmount amount)
+                                ]
+                                [ text <| "Suggestested: " ++ (amount |> String.fromAmount) ]
+                            ]
         ]
     ]
 
@@ -603,8 +617,30 @@ update model msg =
                     , Update.delegate CloseModal
                     )
 
+        CreatePaymentApplySuggestedAmount amount ->
+            ( { model
+                | create =
+                    model.create
+                        |> Maybe.map
+                            (\createModel ->
+                                let
+                                    amountField =
+                                        createModel.amount
+                                in
+                                { createModel
+                                    | amount =
+                                        { amountField
+                                            | value =
+                                                amount |> String.fromFloat
+                                        }
+                                }
+                            )
+              }
+            , Cmd.none
+            )
 
-suggestPaymentAmount : String -> String -> Dict Int number -> Dict Int number -> number
+
+suggestPaymentAmount : String -> String -> Dict Int number -> Dict Int number -> Result String number
 suggestPaymentAmount payer receiver paymentBalance balance =
     let
         payerId =
@@ -621,5 +657,11 @@ suggestPaymentAmount payer receiver paymentBalance balance =
             (balance |> Dict.get receiverId |> Maybe.withDefault 0)
                 + (paymentBalance |> Dict.get receiverId |> Maybe.withDefault 0)
     in
-    min -payerBalance receiverBalance
-        |> max 0
+    if payerBalance >= 0 then
+        Err "Payer doesn't owe anything."
+
+    else if receiverBalance <= 0 then
+        Err "Receiver isn't owed anything"
+
+    else
+        Ok (min -payerBalance receiverBalance)
