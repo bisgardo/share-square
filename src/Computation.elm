@@ -97,6 +97,7 @@ initCreate initId =
         , value = ""
         , validationError = Nothing
         }
+    , suggestedAmount = Nothing
     }
 
 
@@ -111,6 +112,7 @@ type alias CreateModel =
     { payerId : String
     , receiverId : String
     , amount : Validated Field
+    , suggestedAmount : Maybe Float
     }
 
 
@@ -217,11 +219,19 @@ viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
 viewAdd participantModel model =
     let
         participantsFields =
-            List.map Participant.toField participantModel.participants
+            participantModel.participants
+                |> List.map Participant.toField
     in
     [ optionsInput "new-payments-payer" "Payer" participantsFields model.payerId CreatePaymentEditPayer
     , optionsInput "new-payments-receiver" "Receiver" participantsFields model.receiverId CreatePaymentEditReceiver
     , textInput "Amount" model.amount CreatePaymentEditAmount
+    , div [ Html.Attributes.class "row mb-3" ]
+        [ Html.div [ Html.Attributes.class "col-sm-3" ] []
+        , div [ Html.Attributes.class "col-sm-9" ]
+            [ text <| "Suggestested: "
+            , Html.a [] [ text <| (model.suggestedAmount |> Maybe.withDefault 0 |> String.fromAmount) ]
+            ]
+        ]
     ]
 
 
@@ -283,8 +293,8 @@ viewSummaryList participants perspective computed =
                         |> Dict.toFlatList
                         |> List.map
                             (\( payer, receiver, amount ) ->
-                                ( lookupName payer participants
-                                , lookupName receiver participants
+                                ( participants |> lookupName payer
+                                , participants |> lookupName receiver
                                 , amount |> String.fromAmount
                                 )
                             )
@@ -292,7 +302,7 @@ viewSummaryList participants perspective computed =
                         |> List.map
                             (\( payer, receiver, amount ) ->
                                 Html.li []
-                                    [ payer ++ " has expended " ++ amount ++ " for " ++ receiver ++ "." |> text ]
+                                    [ text <| payer ++ " has expended " ++ amount ++ " for " ++ receiver ++ "." ]
                             )
                     )
 
@@ -476,8 +486,7 @@ update model msg =
                         |> List.head
                         |> Maybe.map
                             (\firstParticipant ->
-                                initCreate
-                                    (firstParticipant |> String.fromInt)
+                                initCreate (firstParticipant |> String.fromInt)
                             )
               }
             , Cmd.none
@@ -492,7 +501,18 @@ update model msg =
                     model.create
                         |> Maybe.map
                             (\createModel ->
-                                { createModel | payerId = payerId }
+                                { createModel
+                                    | payerId = payerId
+                                    , suggestedAmount =
+                                        model.computed
+                                            |> Maybe.map
+                                                (.balance
+                                                    >> suggestPaymentAmount
+                                                        payerId
+                                                        createModel.receiverId
+                                                        model.paymentBalance
+                                                )
+                                }
                             )
               }
             , Cmd.none
@@ -504,7 +524,18 @@ update model msg =
                     model.create
                         |> Maybe.map
                             (\createModel ->
-                                { createModel | receiverId = receiverId }
+                                { createModel
+                                    | receiverId = receiverId
+                                    , suggestedAmount =
+                                        model.computed
+                                            |> Maybe.map
+                                                (.balance
+                                                    >> suggestPaymentAmount
+                                                        createModel.payerId
+                                                        receiverId
+                                                        model.paymentBalance
+                                                )
+                                }
                             )
               }
             , Cmd.none
@@ -571,3 +602,24 @@ update model msg =
                       }
                     , Update.delegate CloseModal
                     )
+
+
+suggestPaymentAmount : String -> String -> Dict Int number -> Dict Int number -> number
+suggestPaymentAmount payer receiver paymentBalance balance =
+    let
+        payerId =
+            payer |> String.toInt |> Maybe.withDefault 0
+
+        receiverId =
+            receiver |> String.toInt |> Maybe.withDefault 0
+
+        payerBalance =
+            (balance |> Dict.get payerId |> Maybe.withDefault 0)
+                + (paymentBalance |> Dict.get payerId |> Maybe.withDefault 0)
+
+        receiverBalance =
+            (balance |> Dict.get receiverId |> Maybe.withDefault 0)
+                + (paymentBalance |> Dict.get receiverId |> Maybe.withDefault 0)
+    in
+    min -payerBalance receiverBalance
+        |> max 0
