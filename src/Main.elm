@@ -163,11 +163,11 @@ update msg model =
         ExpenseMsg expenseMsg ->
             let
                 ( ( newExpenseModel, recompute ), newExpensesCmd ) =
-                    Expense.update expenseMsg model.expense
+                     model.expense |> Expense.update expenseMsg
 
                 ( newComputationModel, newComputationCmd ) =
                     if recompute then
-                        Computation.update model.computation
+                         model.computation |> Computation.update
                             (Computation.RecomputeBalance
                                 (model.expense.participant.participants |> List.map .id)
                                 newExpenseModel.expenses
@@ -189,7 +189,7 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( newComputationModel, newComputationCmd ) =
-                    Computation.update model.computation computationMsg
+                    model.computation |> Computation.update computationMsg
             in
             ( { model | computation = newComputationModel }
             , newComputationCmd |> Cmd.map ComputationMsg
