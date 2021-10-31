@@ -63,7 +63,7 @@ initCreate =
     { name =
         { key = "new-participant-name"
         , value = ""
-        , validationError = Nothing
+        , feedback = None
         }
     }
 
@@ -150,7 +150,7 @@ update msg model =
                                     | name =
                                         { nameField
                                             | value = name
-                                            , validationError = validateName model name
+                                            , feedback = validateName model name
                                         }
                                 }
                             )
@@ -226,10 +226,10 @@ cleanName =
             )
 
 
-validateName : Model -> String -> Maybe String
+validateName : Model -> String -> Feedback
 validateName model name =
     if model.namesLowercase |> Set.member (name |> String.toLower) then
-        Just "Duplicate name."
+        Error "Duplicate name."
 
     else
-        Nothing
+        None

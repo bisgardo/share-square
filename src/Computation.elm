@@ -98,9 +98,9 @@ initCreate initId =
     , amount =
         { key = "payment-create-amount"
         , value = ""
-        , validationError = Nothing
+        , feedback = None
         }
-    , suggestedAmount = Ok 0
+    , suggestedAmount = Err ( Nothing, Nothing )
     }
 
 
@@ -115,7 +115,7 @@ type alias CreateModel =
     { payerId : String
     , receiverId : String
     , amount : Validated Field
-    , suggestedAmount : Result NoSuggestedAmountReason Float
+    , suggestedAmount : Result ( Maybe Int, Maybe Int ) Float
     }
 
 
@@ -134,60 +134,63 @@ type Msg
     | CreatePaymentEditAmount String
     | CreatePaymentApplySuggestedAmount Float
     | CreatePaymentSubmit
+    | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
 
 
 view : Participant.Model -> Model -> Html Msg
 view participantModel model =
     row
-        [ div [ Html.Attributes.class "col" ]
-            [ Html.h3 [] [ text "Payments" ]
-            , viewPayments participantModel model
-            , Html.h3 [] [ text "Balances" ]
-            , viewBalances participantModel.idToName model
-            ]
+        [ div [ Html.Attributes.class "col" ] <|
+            List.concat
+                [ [ Html.h3 [] [ text "Payments" ]
+                  ]
+                , viewPayments participantModel model
+                , [ Html.h3 [] [ text "Balances" ]
+                  , viewBalances participantModel.idToName model
+                  ]
+                ]
         , div [ Html.Attributes.class "col-4" ]
             [ div [ Html.Attributes.class "card" ]
                 [ div [ Html.Attributes.class "card-header" ]
                     [ text "Summary (before payments)" ]
-                , div [ Html.Attributes.class "card-body" ]
-                    [ viewSummary participantModel.idToName model ]
+                , div [ Html.Attributes.class "card-body" ] <|
+                    viewSummary participantModel.idToName model
                 ]
             ]
         ]
 
 
-viewPayments : Participant.Model -> Model -> Html Msg
+viewPayments : Participant.Model -> Model -> List (Html Msg)
 viewPayments participantModel model =
-    div [] <|
-        [ Html.table [ Html.Attributes.class "table" ]
-            [ Html.thead []
-                [ Html.tr []
-                    [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
-                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
-                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
-                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
-                    ]
+    [ Html.table [ Html.Attributes.class "table" ]
+        [ Html.thead []
+            [ Html.tr []
+                [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
                 ]
-            , Html.Keyed.node "tbody"
-                []
-                (model.payments
-                    |> List.map
-                        (\payment ->
-                            ( payment.id
-                            , Html.tr []
-                                [ Html.td [] [ Html.text payment.id ]
-                                , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
-                                , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
-                                , Html.td [] [ Html.text (payment.amount |> String.fromAmount) ]
-                                ]
-                            )
-                        )
-                )
             ]
-        , viewCreateOpen participantModel
-        , viewCreateModal participantModel model
+        , Html.Keyed.node "tbody"
+            []
+            (model.payments
+                |> List.map
+                    (\payment ->
+                        ( payment.id
+                        , Html.tr []
+                            [ Html.td [] [ Html.text payment.id ]
+                            , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
+                            , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
+                            , Html.td [] [ Html.text (payment.amount |> String.fromAmount) ]
+                            ]
+                        )
+                    )
+            )
         ]
+    , viewCreateOpen participantModel
+    , viewCreateModal participantModel model
+    ]
 
 
 viewCreateOpen : Participant.Model -> Html Msg
@@ -226,49 +229,81 @@ viewAdd participantModel model =
         participantsFields =
             participantModel.participants
                 |> List.map Participant.toField
-    in
-    [ optionsInput "new-payments-payer" "Payer" participantsFields model.payerId CreatePaymentEditPayer
-    , optionsInput "new-payments-receiver" "Receiver" participantsFields model.receiverId CreatePaymentEditReceiver
-    , div [ Html.Attributes.class "row mb-3" ]
-        [ Html.div [ Html.Attributes.class "col-sm-3" ] []
-        , div [ Html.Attributes.class "col-sm-9" ] <|
-            case model.suggestedAmount of
-                Err reason ->
-                    [ Html.i []
-                        [ text <|
-                            case reason of
-                                PayerNotOwing payerId ->
-                                    (participantModel.idToName |> Participant.lookupName payerId) ++ " doesn't owe anything."
 
-                                ReceiverNotOwed receiverId ->
-                                    (participantModel.idToName |> Participant.lookupName receiverId) ++ " isn't owed anything."
-                        ]
-                    ]
+        ( payerFeedback, receiverFeedback, suggestedAmount ) =
+            case model.suggestedAmount of
+                Err ( payerIdNotOwing, receiverIdNotOwed ) ->
+                    ( payerIdNotOwing
+                        |> Maybe.unwrap None
+                            (\payerId ->
+                                Info <|
+                                    (participantModel.idToName |> Participant.lookupName payerId)
+                                        ++ " doesn't owe anything."
+                            )
+                    , receiverIdNotOwed
+                        |> Maybe.unwrap None
+                            (\receiverId ->
+                                Info <|
+                                    (participantModel.idToName |> Participant.lookupName receiverId)
+                                        ++ " isn't owed anything."
+                            )
+                    , Nothing
+                    )
 
                 Ok amount ->
-                    if amount == (model.amount.value |> String.toFloat |> Maybe.withDefault 0) then
+                    ( None
+                    , None
+                    , if amount == (model.amount.value |> String.toFloat |> Maybe.withDefault 0) then
                         -- Amount is already the suggested value.
-                        []
+                        Nothing
 
-                    else
-                        [ Html.a
-                            -- Need to set href "#" to render the link correctly,
-                            -- but then "prevent default" also needs to be enabled to actually prevent a URL change.
-                            -- I'm puzzled why JSON decoding is required to do this, but that seems to be the case...
-                            [ Html.Attributes.href "#"
-                            , Html.Events.preventDefaultOn "click"
-                                (Json.Decode.succeed ( CreatePaymentApplySuggestedAmount amount, True ))
-                            ]
-                            [ text <| "Suggestested amount: " ++ (amount |> String.fromAmount) ]
+                      else
+                        Just amount
+                    )
+    in
+    [ optionsInput "new-payments-payer"
+        "Payer"
+        { fields = participantsFields, feedback = payerFeedback }
+        model.payerId
+        CreatePaymentEditPayer
+    , optionsInput "new-payments-receiver"
+        "Receiver"
+        { fields = participantsFields, feedback = receiverFeedback }
+        model.receiverId
+        CreatePaymentEditReceiver
+    , div
+        ([ Html.Attributes.class "row mb-3" ]
+            ++ (if Maybe.isNothing suggestedAmount then
+                    [ Html.Attributes.class "d-none" ]
+
+                else
+                    []
+               )
+        )
+        [ Html.div [ Html.Attributes.class "col-sm-3" ] []
+        , div [ Html.Attributes.class "col-sm-9" ] <|
+            case suggestedAmount of
+                Nothing ->
+                    []
+
+                Just amount ->
+                    [ Html.a
+                        -- Need to set href "#" to render the link correctly,
+                        -- but then "prevent default" also needs to be enabled to actually prevent a URL change.
+                        -- I'm amazed that JSON decoding must be involved to do this, but it seems to be the case...
+                        [ Html.Attributes.href "#"
+                        , Html.Events.preventDefaultOn "click"
+                            (Json.Decode.succeed ( CreatePaymentApplySuggestedAmount amount, True ))
                         ]
+                        [ text <| "Suggestested amount: " ++ (amount |> String.fromAmount) ]
+                    ]
         ]
     , textInput "Amount" model.amount CreatePaymentEditAmount
     ]
 
 
-viewSummary : Dict Int String -> Model -> Html Msg
+viewSummary : Dict Int String -> Model -> List (Html Msg)
 viewSummary participants model =
-    Html.div []
         [ div [ Html.Attributes.class "form-check form-check-inline" ]
             [ Html.input
                 [ Html.Attributes.class "form-check-input"
@@ -333,7 +368,14 @@ viewSummaryList participants perspective computed =
                         |> List.map
                             (\( payer, receiver, amount ) ->
                                 Html.li []
-                                    [ text <| payer ++ " has expended " ++ amount ++ " for " ++ receiver ++ "." ]
+                                    [ text <|
+                                        payer
+                                            ++ " has expended "
+                                            ++ amount
+                                            ++ " for "
+                                            ++ receiver
+                                            ++ "."
+                                    ]
                             )
                     )
 
@@ -355,7 +397,15 @@ viewSummaryList participants perspective computed =
                         |> List.sort
                         |> List.map
                             (\( receiver, payer, amount ) ->
-                                Html.li [] [ text (receiver ++ " owes " ++ payer ++ " " ++ amount ++ ".") ]
+                                Html.li []
+                                    [ text <|
+                                        receiver
+                                            ++ " owes "
+                                            ++ payer
+                                            ++ " "
+                                            ++ amount
+                                            ++ "."
+                                    ]
                             )
                     )
 
@@ -399,7 +449,10 @@ viewBalances participants model =
                         >> List.map
                             (\( participantName, participantId, amount ) ->
                                 ( participantId |> String.fromInt
-                                , Html.tr [] [ Html.td [] [ text participantName ], Html.td [] [ text amount ] ]
+                                , Html.tr []
+                                    [ Html.td [] [ text participantName ]
+                                    , Html.td [] [ text amount ]
+                                    ]
                                 )
                             )
                     )
@@ -476,6 +529,11 @@ invert =
         Dict.empty
 
 
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    modalClosed ModalClosed |> Sub.map LayoutMsg
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -536,7 +594,7 @@ update msg model =
                                     | payerId = payerId
                                     , suggestedAmount =
                                         model.computed
-                                            |> Maybe.unwrap (Ok 0)
+                                            |> Maybe.unwrap (Err ( Nothing, Nothing ))
                                                 (.balance
                                                     >> suggestPaymentAmount
                                                         payerId
@@ -559,7 +617,7 @@ update msg model =
                                     | receiverId = receiverId
                                     , suggestedAmount =
                                         model.computed
-                                            |> Maybe.unwrap (Ok 0)
+                                            |> Maybe.unwrap (Err ( Nothing, Nothing ))
                                                 (.balance
                                                     >> suggestPaymentAmount
                                                         createModel.payerId
@@ -586,7 +644,7 @@ update msg model =
                                     | amount =
                                         { amountField
                                             | value = amount
-                                            , validationError = Expense.validateAmount amount
+                                            , feedback = Expense.validateAmount amount
                                         }
                                 }
                             )
@@ -647,6 +705,16 @@ update msg model =
                     , Update.delegate CloseModal
                     )
 
+        LayoutMsg layoutMsg ->
+            case layoutMsg of
+                -- Must explicitly reset the modal for Firefox to render selects correctly on next open.
+                ModalClosed modalId ->
+                    if modalId == createModalId then
+                        ( { model | create = Nothing }, Cmd.none )
+
+                    else
+                        ( model, Cmd.none )
+
         DomMsg result ->
             let
                 _ =
@@ -660,12 +728,7 @@ update msg model =
             ( model, Cmd.none )
 
 
-type NoSuggestedAmountReason
-    = PayerNotOwing Int
-    | ReceiverNotOwed Int
-
-
-suggestPaymentAmount : String -> String -> Dict Int Float -> Dict Int Float -> Result NoSuggestedAmountReason Float
+suggestPaymentAmount : String -> String -> Dict Int Float -> Dict Int Float -> Result ( Maybe Int, Maybe Int ) Float
 suggestPaymentAmount payer receiver paymentBalance balance =
     let
         payerId =
@@ -681,12 +744,23 @@ suggestPaymentAmount payer receiver paymentBalance balance =
         receiverBalance =
             (balance |> Dict.get receiverId |> Maybe.withDefault 0)
                 + (paymentBalance |> Dict.get receiverId |> Maybe.withDefault 0)
-    in
-    if payerBalance >= 0 then
-        Err (PayerNotOwing payerId)
 
-    else if receiverBalance <= 0 then
-        Err (ReceiverNotOwed receiverId)
+        suggestedAmount =
+            min -payerBalance receiverBalance
+    in
+    if suggestedAmount <= 0 then
+        Err
+            ( if payerBalance >= 0 then
+                Just payerId
+
+              else
+                Nothing
+            , if receiverBalance <= 0 then
+                Just receiverId
+
+              else
+                Nothing
+            )
 
     else
-        Ok (min -payerBalance receiverBalance)
+        Ok suggestedAmount

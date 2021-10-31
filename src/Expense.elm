@@ -68,7 +68,7 @@ create id model =
         payerResult =
             case model.payerId |> String.toInt of
                 Nothing ->
-                    Err ("unexpected non-integer key '" ++ model.payerId ++ "' of payer")
+                    Err <| "unexpected non-integer key '" ++ model.payerId ++ "' of payer"
 
                 Just payerId ->
                     Ok payerId
@@ -76,7 +76,7 @@ create id model =
         amountResult =
             case model.amount.value |> String.toFloat of
                 Nothing ->
-                    Err ("cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number")
+                    Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
                 Just amount ->
                     Ok amount
@@ -87,7 +87,7 @@ create id model =
                     (\key ->
                         case key |> String.toInt of
                             Nothing ->
-                                Err ("unexpected non-integer receiver '" ++ key ++ "'")
+                                Err <| "unexpected non-integer receiver '" ++ key ++ "'"
 
                             Just receiverId ->
                                 Ok receiverId
@@ -122,20 +122,19 @@ initCreate initPayerId initReceiverIds =
     , amount =
         { key = "expense-create-amount"
         , value = ""
-        , validationError = Nothing
+        , feedback = None
         }
     , description =
         { key = "expense-create-description"
         , value = ""
-        , validationError = Nothing
+        , feedback = None
         }
     , receivers = initReceiverIds
     }
 
 
-view : Model -> Html Msg
+view : Model -> List (Html Msg)
 view model =
-    Html.div []
         [ Html.table [ class "table" ]
             [ Html.thead []
                 [ Html.tr []
@@ -249,9 +248,10 @@ viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
 viewAdd participantModel model =
     let
         participantsFields =
-            List.map Participant.toField participantModel.participants
+            participantModel.participants
+                |> List.map Participant.toField
     in
-    [ optionsInput "new-expense-payer" "Payer" participantsFields model.payerId CreateEditPayer
+    [ optionsInput "new-expense-payer" "Payer" { fields = participantsFields, feedback = None } model.payerId CreateEditPayer
     , textInput "Amount" model.amount CreateEditAmount
     , textInput "Description" model.description CreateEditDescription
     , checkboxesInput "Receivers" participantsFields (model.receivers |> Dict.keys |> Set.fromList) CreateEditReceiver
@@ -348,7 +348,7 @@ update msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , validationError = validateAmount amount
+                                                , feedback = validateAmount amount
                                             }
                                     }
                                 )
@@ -372,7 +372,7 @@ update msg model =
                                         | description =
                                             { descriptionField
                                                 | value = description
-                                                , validationError = validateDescription description
+                                                , feedback = validateDescription description
                                             }
                                     }
                                 )
@@ -405,6 +405,7 @@ update msg model =
 
         LayoutMsg layoutMsg ->
             case layoutMsg of
+                -- Must explicitly reset the modal for Firefox to render selects correctly on next open.
                 ModalClosed modalId ->
                     if modalId == createModalId then
                         ( ( { model | create = Nothing }, False ), Cmd.none )
@@ -422,24 +423,24 @@ update msg model =
             )
 
 
-validateAmount : String -> Maybe String
+validateAmount : String -> Feedback
 validateAmount amount =
     if amount |> String.isEmpty then
-        Nothing
+        None
 
     else
         case amount |> String.toFloat of
             Nothing ->
-                Just "Not a number."
+                Error "Not a number."
 
             Just _ ->
-                Nothing
+                None
 
 
-validateDescription : String -> Maybe String
+validateDescription : String -> Feedback
 validateDescription description =
     if String.length description > maxDescriptionLength then
-        Just ("Longer than " ++ String.fromInt maxDescriptionLength ++ " characters.")
+        Error <| "Longer than " ++ String.fromInt maxDescriptionLength ++ " characters."
 
     else
-        Nothing
+        None
