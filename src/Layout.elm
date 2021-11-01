@@ -3,7 +3,6 @@ port module Layout exposing (..)
 import Html exposing (Html, button, div, h5, text)
 import Html.Attributes exposing (class, disabled, tabindex, type_)
 import Html.Events exposing (onCheck, onInput)
-import Maybe.Extra as Maybe
 import Set exposing (Set)
 
 
@@ -103,35 +102,87 @@ type alias Field =
     }
 
 
+type alias Fields =
+    { fields : List Field }
+
+
+type Feedback
+    = None
+    | Info String
+    | Success String
+    | Warning String
+    | Error String
+
+
 type alias Validated a =
     { a
-        | validationError : Maybe String
+        | feedback : Feedback
     }
 
 
 isInvalid : Validated a -> Bool
-isInvalid =
-    .validationError >> Maybe.isJust
+isInvalid validated =
+    case validated.feedback of
+        Error _ ->
+            True
+
+        _ ->
+            False
 
 
-optionsInput : String -> String -> List Field -> String -> (String -> msg) -> Html msg
-optionsInput key label options value tagger =
+validationFeedback : Feedback -> ( List (Html.Attribute msg), List (Html msg) )
+validationFeedback feedback =
+    case feedback of
+        None ->
+            ( [], [] )
+
+        Info message ->
+            ( []
+            , [ div [ class "valid-feedback text-muted fst-italic", Html.Attributes.style "display" "block" ] [ text message ] ]
+            )
+
+        Success message ->
+            ( [ class "is-valid" ]
+            , [ div [ class "valid-feedback" ] [ text message ] ]
+            )
+
+        Warning message ->
+            ( [ class "is-invalid border border-warning", Html.Attributes.style "background-size" "0" ]
+            , [ div [ class "invalid-feedback text-warning" ] [ text message ] ]
+            )
+
+        Error message ->
+            ( [ class "is-invalid" ]
+            , [ div [ class "invalid-feedback" ] [ text message ] ]
+            )
+
+
+optionsInput : String -> String -> Validated Fields -> String -> (String -> msg) -> Html msg
+optionsInput key label field value tagger =
+    let
+        ( validationAttributes, validationElements ) =
+            validationFeedback field.feedback
+    in
     div [ rowClass, class "row mb-3" ]
         [ Html.label [ class "col-sm-3 col-form-label", Html.Attributes.for key ] [ text label ]
-        , div [ class "col-sm-9" ]
+        , div [ class "col-sm-9" ] <|
             [ Html.select
-                [ Html.Attributes.id key, class "form-select", onInput tagger ]
-                (List.map (optionInput value) options)
+                ([ Html.Attributes.id key
+                 , class "form-select"
+                 , onInput tagger
+                 ]
+                    ++ validationAttributes
+                )
+                (List.map (optionInput value) field.fields)
             ]
+                ++ validationElements
         ]
 
 
 optionInput : String -> Field -> Html msg
 optionInput value field =
     Html.option
-        ([ Html.Attributes.value field.key ]
-            ++ optionSelected (field.key == value)
-        )
+        ([ Html.Attributes.value field.key ] ++ optionSelected (field.key == value))
         [ text field.value ]
 
 
@@ -146,8 +197,16 @@ optionSelected condition =
 
 textInput : String -> Validated Field -> (String -> msg) -> Html msg
 textInput label field tagger =
+    let
+        ( validationAttributes, validationElements ) =
+            validationFeedback field.feedback
+    in
     div [ class "row mb-3" ]
-        [ Html.label [ class "col-sm-3 col-form-label", Html.Attributes.for field.key ] [ text label ]
+        [ Html.label
+            [ class "col-sm-3 col-form-label"
+            , Html.Attributes.for field.key
+            ]
+            [ text label ]
         , div [ class "col-sm-9" ] <|
             [ Html.input
                 ([ Html.Attributes.id field.key
@@ -155,13 +214,13 @@ textInput label field tagger =
                  , class "form-control"
                  , onInput tagger
                  , Html.Attributes.value field.value
+                 , Html.Attributes.autocomplete False
                  ]
-                    ++ validation field.validationError (always <| class "is-invalid")
+                    ++ validationAttributes
                 )
                 []
             ]
-                ++ validation field.validationError
-                    (\msg -> div [ class "invalid-feedback" ] [ text msg ])
+                ++ validationElements
         ]
 
 
@@ -190,11 +249,6 @@ checkboxesInput label fields checkedKeys tagger =
                 )
                 fields
         ]
-
-
-validation : Maybe String -> (String -> a) -> List a
-validation error generate =
-    Maybe.map generate error |> Maybe.toList
 
 
 port closeModal : String -> Cmd msg
