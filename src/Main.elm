@@ -1,7 +1,6 @@
 module Main exposing (main)
 
 import Browser
-import Browser.Dom as Dom
 import Computation
 import Expense
 import Html exposing (Html)
@@ -9,7 +8,6 @@ import Html.Attributes
 import Html.Events
 import Layout exposing (..)
 import Participant
-import Task
 
 
 type alias Flags =
@@ -34,7 +32,6 @@ type Msg
     = ExpenseMsg Expense.Msg
     | ComputationMsg Computation.Msg
     | SetState State
-    | DomMsg (Result Dom.Error ())
 
 
 main : Program Flags Model Msg
@@ -49,12 +46,22 @@ main =
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
+    let
+        ( expenseModel, expenseCmd ) =
+            Expense.init
+
+        ( computationModel, computationCmd ) =
+            Computation.init
+    in
     ( { environment = flags.environment
-      , expense = Expense.init
-      , computation = Computation.init
+      , expense = expenseModel
+      , computation = computationModel
       , state = Expenses
       }
-    , Dom.focus Participant.createId |> Task.attempt DomMsg
+    , Cmd.batch
+        [ expenseCmd |> Cmd.map ExpenseMsg
+        , computationCmd |> Cmd.map ComputationMsg
+        ]
     )
 
 
@@ -203,15 +210,3 @@ update msg model =
 
         SetState state ->
             ( { model | state = state }, Cmd.none )
-
-        DomMsg result ->
-            let
-                _ =
-                    case result of
-                        Err (Dom.NotFound id) ->
-                            Debug.log "DOM error: Element not found" id
-
-                        Ok () ->
-                            ""
-            in
-            ( model, Cmd.none )

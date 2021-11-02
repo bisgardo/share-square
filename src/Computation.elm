@@ -13,12 +13,21 @@ import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
 import Task
 import Util.Dict as Dict
+import Util.List as List
 import Util.String as String
 import Util.Update as Update
 
 
+
+-- TODO Move "payment" things to it's own component.
+
+
 createModalId =
     "payment-create"
+
+
+createModalOpenId =
+    createModalId ++ "-open"
 
 
 type alias Model =
@@ -80,15 +89,17 @@ create id model =
         amountResult
 
 
-init : Model
+init : ( Model, Cmd Msg )
 init =
-    { create = Nothing
-    , summaryPerspective = SummaryPerspectiveOutlays
-    , computed = Nothing
-    , payments = []
-    , paymentBalance = Dict.empty
-    , nextPaymentId = 1
-    }
+    ( { create = Nothing
+      , summaryPerspective = SummaryPerspectiveOutlays
+      , computed = Nothing
+      , payments = []
+      , paymentBalance = Dict.empty
+      , nextPaymentId = 1
+      }
+    , Cmd.none
+    )
 
 
 initCreate : String -> CreateModel
@@ -134,6 +145,7 @@ type Msg
     | CreatePaymentEditAmount String
     | CreatePaymentApplySuggestedAmount Float
     | CreatePaymentSubmit
+    | DeletePayment String
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
 
@@ -170,6 +182,7 @@ viewPayments participantModel model =
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
+                , Html.th [] []
                 ]
             ]
         , Html.Keyed.node "tbody"
@@ -183,6 +196,16 @@ viewPayments participantModel model =
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
                             , Html.td [] [ Html.text (payment.amount |> String.fromAmount) ]
+                            , Html.td
+                                [ Html.Attributes.align "right", Html.Events.onClick (DeletePayment payment.id) ]
+                                [ Html.a
+                                    [ data "bs-toggle" "tooltip"
+                                    , data "bs-placement" "left"
+                                    , Html.Attributes.title "Delete"
+                                    , Html.Attributes.attribute "role" "button"
+                                    ]
+                                    [ Html.i [ Html.Attributes.class "bi bi-trash" ] [] ]
+                                ]
                             ]
                         )
                     )
@@ -196,7 +219,7 @@ viewPayments participantModel model =
 viewCreateOpen : Participant.Model -> Html Msg
 viewCreateOpen participantModel =
     openModalButton
-        (createModalId ++ "-open")
+        createModalOpenId
         createModalId
         "Add payment"
         [ Html.Attributes.disabled (participantModel.participants |> List.isEmpty)
@@ -304,46 +327,46 @@ viewAdd participantModel model =
 
 viewSummary : Dict Int String -> Model -> List (Html Msg)
 viewSummary participants model =
-        [ div [ Html.Attributes.class "form-check form-check-inline" ]
-            [ Html.input
-                [ Html.Attributes.class "form-check-input"
-                , Html.Attributes.id "computation-summary-outlay"
-                , Html.Attributes.name "computation-summary"
-                , Html.Attributes.type_ "radio"
-                , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveOutlays)
-                , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveOutlays)
-                ]
-                []
-            , Html.label
-                [ Html.Attributes.class "form-check-label"
-                , Html.Attributes.for "computation-summary-outlay"
-                ]
-                [ text "Outlays" ]
+    [ div [ Html.Attributes.class "form-check form-check-inline" ]
+        [ Html.input
+            [ Html.Attributes.class "form-check-input"
+            , Html.Attributes.id "computation-summary-outlay"
+            , Html.Attributes.name "computation-summary"
+            , Html.Attributes.type_ "radio"
+            , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveOutlays)
+            , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveOutlays)
             ]
-        , div [ Html.Attributes.class "form-check form-check-inline" ]
-            [ Html.input
-                [ Html.Attributes.class "form-check-input"
-                , Html.Attributes.id "computation-summary-debt"
-                , Html.Attributes.name "computation-summary"
-                , Html.Attributes.type_ "radio"
-                , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveDebt)
-                , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveDebt)
-                ]
-                []
-            , Html.label
-                [ Html.Attributes.class "form-check-label"
-                , Html.Attributes.for "computation-summary-debt"
-                ]
-                [ text "Debt" ]
+            []
+        , Html.label
+            [ Html.Attributes.class "form-check-label"
+            , Html.Attributes.for "computation-summary-outlay"
             ]
-        , Html.hr [] []
-        , case model.computed of
-            Nothing ->
-                Html.p [] [ Html.em [] [ text "No result available yet." ] ]
-
-            Just computed ->
-                viewSummaryList participants model.summaryPerspective computed
+            [ text "Outlays" ]
         ]
+    , div [ Html.Attributes.class "form-check form-check-inline" ]
+        [ Html.input
+            [ Html.Attributes.class "form-check-input"
+            , Html.Attributes.id "computation-summary-debt"
+            , Html.Attributes.name "computation-summary"
+            , Html.Attributes.type_ "radio"
+            , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveDebt)
+            , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveDebt)
+            ]
+            []
+        , Html.label
+            [ Html.Attributes.class "form-check-label"
+            , Html.Attributes.for "computation-summary-debt"
+            ]
+            [ text "Debt" ]
+        ]
+    , Html.hr [] []
+    , case model.computed of
+        Nothing ->
+            Html.p [] [ Html.em [] [ text "No result available yet." ] ]
+
+        Just computed ->
+            viewSummaryList participants model.summaryPerspective computed
+    ]
 
 
 viewSummaryList : Dict Int String -> SummaryPerspective -> ComputedModel -> Html Msg
@@ -690,19 +713,28 @@ update msg model =
                             model.payments ++ [ payment ]
                         , paymentBalance =
                             model.paymentBalance
-                                |> Dict.update payment.payer
-                                    (Maybe.withDefault 0
-                                        >> (\payerBalance -> payerBalance + payment.amount)
-                                        >> Just
-                                    )
-                                |> Dict.update payment.receiver
-                                    (Maybe.withDefault 0
-                                        >> (\receiverBalance -> receiverBalance - payment.amount)
-                                        >> Just
-                                    )
+                                |> updatePaymentBalance payment.payer -payment.amount
+                                |> updatePaymentBalance payment.receiver payment.amount
                         , nextPaymentId = id + 1
                       }
                     , Update.delegate CloseModal
+                    )
+
+        DeletePayment paymentId ->
+            case model.payments |> List.withoutFirst (.id >> (==) paymentId) of
+                ( Nothing, _ ) ->
+                    -- Never happens.
+                    ( model, Cmd.none )
+
+                ( Just payment, newPayments ) ->
+                    ( { model
+                        | payments = newPayments
+                        , paymentBalance =
+                            model.paymentBalance
+                                |> updatePaymentBalance payment.payer payment.amount
+                                |> updatePaymentBalance payment.receiver -payment.amount
+                      }
+                    , Dom.focus createModalOpenId |> Task.attempt DomMsg
                     )
 
         LayoutMsg layoutMsg ->
@@ -764,3 +796,9 @@ suggestPaymentAmount payer receiver paymentBalance balance =
 
     else
         Ok suggestedAmount
+
+
+updatePaymentBalance : Int -> Float -> Dict Int Float -> Dict Int Float
+updatePaymentBalance participantId amount =
+    Dict.update participantId
+        (Maybe.withDefault 0 >> (+) amount >> Just)

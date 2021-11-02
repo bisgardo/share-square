@@ -1,5 +1,6 @@
 module Expense exposing (..)
 
+import Browser.Dom as Dom
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
@@ -8,6 +9,7 @@ import Html.Keyed
 import Layout exposing (..)
 import Participant exposing (Participant)
 import Set exposing (Set)
+import Task
 import Util.Dict as Dict
 import Util.String as String
 import Util.Update as Update
@@ -15,6 +17,10 @@ import Util.Update as Update
 
 createModalId =
     "expense-create"
+
+
+createModalOpenId =
+    createModalId ++ "-open"
 
 
 maxDescriptionLength =
@@ -29,8 +35,10 @@ type Msg
     | CreateEditAmount String
     | CreateEditDescription String
     | CreateEditReceiver String Bool
+    | Delete String
     | LayoutMsg Layout.Msg
     | ParticipantMsg Participant.Msg
+    | DomMsg (Result Dom.Error ())
 
 
 type alias Model =
@@ -107,13 +115,15 @@ create id model =
         receiverResult
 
 
-init : Model
+init : ( Model, Cmd Msg )
 init =
-    { create = Nothing
-    , expenses = []
-    , participant = Participant.init
-    , nextExpenseId = 1
-    }
+    ( { create = Nothing
+      , expenses = []
+      , participant = Participant.init
+      , nextExpenseId = 1
+      }
+    , Dom.focus Participant.createId |> Task.attempt DomMsg
+    )
 
 
 initCreate : String -> Dict String Float -> CreateModel
@@ -135,89 +145,99 @@ initCreate initPayerId initReceiverIds =
 
 view : Model -> List (Html Msg)
 view model =
-        [ Html.table [ class "table" ]
-            [ Html.thead []
-                [ Html.tr []
-                    [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
-                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
-                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
-                    , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Description" ]
-                    , Html.th
-                        [ Html.Attributes.scope "col"
-                        , Html.Attributes.colspan (model.participant.participants |> List.length |> max 1)
-                        ]
-                        [ Html.text "Participants" ]
-                    , Html.td [] []
+    [ Html.table [ class "table" ]
+        [ Html.thead []
+            [ Html.tr []
+                [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Description" ]
+                , Html.th
+                    [ Html.Attributes.scope "col"
+                    , Html.Attributes.colspan (model.participant.participants |> List.length |> max 1)
                     ]
-
-                -- Must use keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
-                , Html.Keyed.node "tr" [] <|
-                    [ ( "id", Html.td [] [] )
-                    , ( "payer", Html.td [] [] )
-                    , ( "amount", Html.td [] [] )
-                    , ( "description", Html.td [] [] )
-                    ]
-                        ++ (model.participant.participants
-                                |> List.map
-                                    (\participant ->
-                                        ( participant.id |> String.fromInt
-                                        , Html.td [] [ Html.text participant.name ]
-                                        )
-                                    )
-                                |> (\htmls ->
-                                        -- Ensure that there is at least 1 cell.
-                                        if htmls |> List.isEmpty then
-                                            [ ( "empty", Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
-
-                                        else
-                                            htmls
-                                   )
-                           )
-                        ++ [ ( "participant-create"
-                             , Html.td [ Html.Attributes.align "right" ]
-                                [ Participant.viewCreateOpen |> Html.map ParticipantMsg ]
-                             )
-                           ]
+                    [ Html.text "Participants" ]
+                , Html.td [] []
                 ]
-            , Html.Keyed.node "tbody"
-                []
-                (model.expenses
-                    |> List.map
-                        (\expense ->
-                            ( expense.id
-                            , Html.tr []
-                                ([ Html.td [] [ Html.text expense.id ]
-                                 , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
-                                 , Html.td [] [ Html.text (expense.amount |> String.fromAmount) ]
-                                 , Html.td [] [ Html.text expense.description ]
-                                 ]
-                                    ++ List.map
-                                        (\participant ->
-                                            Html.td []
-                                                (if Dict.member participant.id expense.receivers then
-                                                    [ Html.text "✓" ]
 
-                                                 else
-                                                    []
-                                                )
-                                        )
-                                        model.participant.participants
-                                    ++ [ Html.td [] [] ]
+            -- Must use keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
+            , Html.Keyed.node "tr" [] <|
+                [ ( "id", Html.td [] [] )
+                , ( "payer", Html.td [] [] )
+                , ( "amount", Html.td [] [] )
+                , ( "description", Html.td [] [] )
+                ]
+                    ++ (model.participant.participants
+                            |> List.map
+                                (\participant ->
+                                    ( participant.id |> String.fromInt
+                                    , Html.td [] [ Html.text participant.name ]
+                                    )
                                 )
+                            |> (\htmls ->
+                                    -- Ensure that there is at least 1 cell.
+                                    if htmls |> List.isEmpty then
+                                        [ ( "empty", Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
+
+                                    else
+                                        htmls
+                               )
+                       )
+                    ++ [ ( "participant-create"
+                         , Html.td [ Html.Attributes.align "right" ]
+                            [ Participant.viewCreateOpen |> Html.map ParticipantMsg ]
+                         )
+                       ]
+            ]
+        , Html.Keyed.node "tbody"
+            []
+            (model.expenses
+                |> List.map
+                    (\expense ->
+                        ( expense.id
+                        , Html.tr []
+                            ([ Html.td [] [ Html.text expense.id ]
+                             , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
+                             , Html.td [] [ Html.text (expense.amount |> String.fromAmount) ]
+                             , Html.td [] [ Html.text expense.description ]
+                             ]
+                                ++ List.map
+                                    (\participant ->
+                                        Html.td []
+                                            (if Dict.member participant.id expense.receivers then
+                                                [ Html.text "✓" ]
+
+                                             else
+                                                []
+                                            )
+                                    )
+                                    model.participant.participants
+                                ++ [ Html.td
+                                        [ Html.Attributes.align "right", Html.Events.onClick (Delete expense.id) ]
+                                        [ Html.a
+                                            [ data "bs-toggle" "tooltip"
+                                            , data "bs-placement" "left"
+                                            , Html.Attributes.title "Delete"
+                                            , Html.Attributes.attribute "role" "button"
+                                            ]
+                                            [ Html.i [ class "bi bi-trash" ] [] ]
+                                        ]
+                                   ]
                             )
                         )
-                )
-            ]
-        , viewCreateOpen model
-        , Participant.viewCreateModal model.participant |> Html.map ParticipantMsg
-        , viewCreateModal model
+                    )
+            )
         ]
+    , viewCreateOpen model
+    , Participant.viewCreateModal model.participant |> Html.map ParticipantMsg
+    , viewCreateModal model
+    ]
 
 
 viewCreateOpen : Model -> Html Msg
 viewCreateOpen model =
     openModalButton
-        (createModalId ++ "-open")
+        createModalOpenId
         createModalId
         "Add expense"
         [ Html.Attributes.disabled (model.participant.participants |> List.isEmpty)
@@ -403,6 +423,16 @@ update msg model =
             , Cmd.none
             )
 
+        Delete expenseId ->
+            ( ( { model
+                    | expenses =
+                        model.expenses |> List.filter (.id >> (/=) expenseId)
+                }
+              , True
+              )
+            , Dom.focus createModalOpenId |> Task.attempt DomMsg
+            )
+
         LayoutMsg layoutMsg ->
             case layoutMsg of
                 -- Must explicitly reset the modal for Firefox to render selects correctly on next open.
@@ -412,6 +442,18 @@ update msg model =
 
                     else
                         ( ( model, False ), Cmd.none )
+
+        DomMsg result ->
+            let
+                _ =
+                    case result of
+                        Err (Dom.NotFound id) ->
+                            Debug.log "DOM error: Element not found" id
+
+                        Ok () ->
+                            ""
+            in
+            ( ( model, False ), Cmd.none )
 
         ParticipantMsg participantMsg ->
             let

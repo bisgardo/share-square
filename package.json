@@ -9,8 +9,9 @@
     "docker": "docker build -t share-square:latest . && docker run --rm -p 8080:80 share-square:latest"
   },
   "dependencies": {
+    "@popperjs/core": "^2.10.1",
     "bootstrap": "^5.1.1",
-    "@popperjs/core": "^2.10.1"
+    "bootstrap-icons": "^1.6.1"
   },
   "devDependencies": {
     "css-loader": "^6.3.0",
