@@ -304,46 +304,46 @@ viewAdd participantModel model =
 
 viewSummary : Dict Int String -> Model -> List (Html Msg)
 viewSummary participants model =
-        [ div [ Html.Attributes.class "form-check form-check-inline" ]
-            [ Html.input
-                [ Html.Attributes.class "form-check-input"
-                , Html.Attributes.id "computation-summary-outlay"
-                , Html.Attributes.name "computation-summary"
-                , Html.Attributes.type_ "radio"
-                , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveOutlays)
-                , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveOutlays)
-                ]
-                []
-            , Html.label
-                [ Html.Attributes.class "form-check-label"
-                , Html.Attributes.for "computation-summary-outlay"
-                ]
-                [ text "Outlays" ]
+    [ div [ Html.Attributes.class "form-check form-check-inline" ]
+        [ Html.input
+            [ Html.Attributes.class "form-check-input"
+            , Html.Attributes.id "computation-summary-outlay"
+            , Html.Attributes.name "computation-summary"
+            , Html.Attributes.type_ "radio"
+            , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveOutlays)
+            , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveOutlays)
             ]
-        , div [ Html.Attributes.class "form-check form-check-inline" ]
-            [ Html.input
-                [ Html.Attributes.class "form-check-input"
-                , Html.Attributes.id "computation-summary-debt"
-                , Html.Attributes.name "computation-summary"
-                , Html.Attributes.type_ "radio"
-                , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveDebt)
-                , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveDebt)
-                ]
-                []
-            , Html.label
-                [ Html.Attributes.class "form-check-label"
-                , Html.Attributes.for "computation-summary-debt"
-                ]
-                [ text "Debt" ]
+            []
+        , Html.label
+            [ Html.Attributes.class "form-check-label"
+            , Html.Attributes.for "computation-summary-outlay"
             ]
-        , Html.hr [] []
-        , case model.computed of
-            Nothing ->
-                Html.p [] [ Html.em [] [ text "No result available yet." ] ]
-
-            Just computed ->
-                viewSummaryList participants model.summaryPerspective computed
+            [ text "Outlays" ]
         ]
+    , div [ Html.Attributes.class "form-check form-check-inline" ]
+        [ Html.input
+            [ Html.Attributes.class "form-check-input"
+            , Html.Attributes.id "computation-summary-debt"
+            , Html.Attributes.name "computation-summary"
+            , Html.Attributes.type_ "radio"
+            , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveDebt)
+            , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveDebt)
+            ]
+            []
+        , Html.label
+            [ Html.Attributes.class "form-check-label"
+            , Html.Attributes.for "computation-summary-debt"
+            ]
+            [ text "Debt" ]
+        ]
+    , Html.hr [] []
+    , case model.computed of
+        Nothing ->
+            Html.p [] [ Html.em [] [ text "No result available yet." ] ]
+
+        Just computed ->
+            viewSummaryList participants model.summaryPerspective computed
+    ]
 
 
 viewSummaryList : Dict Int String -> SummaryPerspective -> ComputedModel -> Html Msg
