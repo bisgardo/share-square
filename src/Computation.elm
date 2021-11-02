@@ -713,8 +713,8 @@ update msg model =
                             model.payments ++ [ payment ]
                         , paymentBalance =
                             model.paymentBalance
-                                |> updatePaymentBalance payment.payer -payment.amount
-                                |> updatePaymentBalance payment.receiver payment.amount
+                                |> updatePaymentBalance payment.payer payment.amount
+                                |> updatePaymentBalance payment.receiver -payment.amount
                         , nextPaymentId = id + 1
                       }
                     , Update.delegate CloseModal
@@ -731,8 +731,8 @@ update msg model =
                         | payments = newPayments
                         , paymentBalance =
                             model.paymentBalance
-                                |> updatePaymentBalance payment.payer payment.amount
-                                |> updatePaymentBalance payment.receiver -payment.amount
+                                |> updatePaymentBalance payment.payer -payment.amount
+                                |> updatePaymentBalance payment.receiver payment.amount
                       }
                     , Dom.focus createModalOpenId |> Task.attempt DomMsg
                     )
