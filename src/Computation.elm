@@ -158,6 +158,35 @@ view participantModel model =
                 [ [ Html.h3 [] [ text "Payments" ]
                   ]
                 , viewPayments participantModel model
+                , [ let
+                        suggestedPayments =
+                            autosuggestPayments
+                                -- The result value of sumValues only contains keys from the first argument.
+                                (Dict.sumValues
+                                    (model.computed |> Maybe.unwrap Dict.empty .balance)
+                                    model.paymentBalance
+                                )
+                    in
+                    if List.isEmpty suggestedPayments then
+                        Html.text "no suggestions"
+
+                    else
+                        Html.ul []
+                            (suggestedPayments
+                                |> List.map
+                                    (\( payerId, receiverId, amount ) ->
+                                        Html.li []
+                                            [ Html.text <|
+                                                "payer="
+                                                    ++ (participantModel.idToName |> Participant.lookupName payerId)
+                                                    ++ ", receiver="
+                                                    ++ (participantModel.idToName |> Participant.lookupName receiverId)
+                                                    ++ ", amount="
+                                                    ++ String.fromAmount amount
+                                            ]
+                                    )
+                            )
+                  ]
                 , [ Html.h3 [] [ text "Balances" ]
                   , viewBalances participantModel.idToName model
                   ]
@@ -713,17 +742,20 @@ update msg model =
                             model.payments ++ [ payment ]
                         , paymentBalance =
                             model.paymentBalance
-                                |> updatePaymentBalance payment.payer payment.amount
-                                |> updatePaymentBalance payment.receiver -payment.amount
+                                |> updatePaymentBalances payment.payer payment.receiver payment.amount
                         , nextPaymentId = id + 1
                       }
                     , Update.delegate CloseModal
                     )
 
         DeletePayment paymentId ->
-            case model.payments |> List.withoutFirst (.id >> (==) paymentId) of
+            case model.payments |> List.withoutFirstMatch (.id >> (==) paymentId) of
                 ( Nothing, _ ) ->
-                    -- Never happens.
+                    -- Should never happen.
+                    let
+                        _ =
+                            Debug.log "error" <| "Cannot delete payment with non-existent ID '" ++ paymentId ++ "'."
+                    in
                     ( model, Cmd.none )
 
                 ( Just payment, newPayments ) ->
@@ -731,8 +763,7 @@ update msg model =
                         | payments = newPayments
                         , paymentBalance =
                             model.paymentBalance
-                                |> updatePaymentBalance payment.payer -payment.amount
-                                |> updatePaymentBalance payment.receiver payment.amount
+                                |> updatePaymentBalances payment.receiver payment.payer payment.amount
                       }
                     , Dom.focus createModalOpenId |> Task.attempt DomMsg
                     )
@@ -760,6 +791,62 @@ update msg model =
             ( model, Cmd.none )
 
 
+findSuggestedPayment : Dict Int Float -> Maybe ( ( Int, Float ), ( Int, Float ) )
+findSuggestedPayment totalBalances =
+    -- TODO Invert to Dict Float (List Int) to simplify the fold below and also checking for exact matches.
+    totalBalances
+        |> Dict.foldl
+            (\participantId participantBalance result ->
+                case result of
+                    Nothing ->
+                        Just ( ( participantId, participantBalance ), ( participantId, participantBalance ) )
+
+                    Just ( ( _, minAmount ) as minResult, ( _, maxAmount ) as maxResult ) ->
+                        if participantBalance < minAmount then
+                            Just ( ( participantId, participantBalance ), maxResult )
+
+                        else if participantBalance > maxAmount then
+                            Just ( minResult, ( participantId, participantBalance ) )
+
+                        else
+                            result
+            )
+            Nothing
+
+
+autosuggestPayments : Dict Int Float -> List ( Int, Int, Float )
+autosuggestPayments totalBalances =
+    case autosuggestPayment totalBalances of
+        Nothing ->
+            []
+
+        Just (( payerId, receiverId, amount ) as result) ->
+            result :: autosuggestPayments (totalBalances |> updatePaymentBalances payerId receiverId amount)
+
+
+autosuggestPayment : Dict Int Float -> Maybe ( Int, Int, Float )
+autosuggestPayment totalBalances =
+    findSuggestedPayment totalBalances
+        |> Maybe.andThen
+            (\( ( minParticipant, minBalance ), ( maxParticipant, maxBalance ) ) ->
+                let
+                    debt =
+                        min maxBalance -minBalance
+                in
+                if debt == 0 then
+                    Nothing
+
+                else
+                    Just ( minParticipant, maxParticipant, debt )
+            )
+
+
+sumBalances : Int -> Dict Int Float -> Dict Int Float -> Float
+sumBalances participantId paymentBalance balance =
+    (balance |> Dict.get participantId |> Maybe.withDefault 0)
+        + (paymentBalance |> Dict.get participantId |> Maybe.withDefault 0)
+
+
 suggestPaymentAmount : String -> String -> Dict Int Float -> Dict Int Float -> Result ( Maybe Int, Maybe Int ) Float
 suggestPaymentAmount payer receiver paymentBalance balance =
     let
@@ -770,12 +857,10 @@ suggestPaymentAmount payer receiver paymentBalance balance =
             receiver |> String.toInt |> Maybe.withDefault 0
 
         payerBalance =
-            (balance |> Dict.get payerId |> Maybe.withDefault 0)
-                + (paymentBalance |> Dict.get payerId |> Maybe.withDefault 0)
+            sumBalances payerId paymentBalance balance
 
         receiverBalance =
-            (balance |> Dict.get receiverId |> Maybe.withDefault 0)
-                + (paymentBalance |> Dict.get receiverId |> Maybe.withDefault 0)
+            sumBalances receiverId paymentBalance balance
 
         suggestedAmount =
             min -payerBalance receiverBalance
@@ -798,7 +883,11 @@ suggestPaymentAmount payer receiver paymentBalance balance =
         Ok suggestedAmount
 
 
+updatePaymentBalances : Int -> Int -> Float -> Dict Int Float -> Dict Int Float
+updatePaymentBalances payerId receiverId amount =
+    updatePaymentBalance payerId amount >> updatePaymentBalance receiverId -amount
+
+
 updatePaymentBalance : Int -> Float -> Dict Int Float -> Dict Int Float
 updatePaymentBalance participantId amount =
-    Dict.update participantId
-        (Maybe.withDefault 0 >> (+) amount >> Just)
+    Dict.update participantId (Maybe.withDefault 0 >> (+) amount >> Just)
