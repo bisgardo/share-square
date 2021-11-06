@@ -146,50 +146,31 @@ type Msg
     | CreatePaymentApplySuggestedAmount Float
     | CreatePaymentSubmit
     | DeletePayment String
+    | ApplySuggestedPayment Int Int Float
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
 
 
 view : Participant.Model -> Model -> Html Msg
 view participantModel model =
+    let
+        suggestedPayments =
+            autosuggestPayments
+                -- The result value of sumValues only contains keys from the first argument.
+                (Dict.sumValues
+                    (model.computed |> Maybe.unwrap Dict.empty .balance)
+                    model.paymentBalance
+                )
+    in
     row
         [ div [ Html.Attributes.class "col" ] <|
             List.concat
-                [ [ Html.h3 [] [ text "Payments" ]
+                [ [ Html.h3 [] [ text "Balances" ]
+                  , viewBalances participantModel.idToName suggestedPayments model
+                  ]
+                , [ Html.h3 [] [ text "Payments" ]
                   ]
                 , viewPayments participantModel model
-                , [ let
-                        suggestedPayments =
-                            autosuggestPayments
-                                -- The result value of sumValues only contains keys from the first argument.
-                                (Dict.sumValues
-                                    (model.computed |> Maybe.unwrap Dict.empty .balance)
-                                    model.paymentBalance
-                                )
-                    in
-                    if List.isEmpty suggestedPayments then
-                        Html.text "no suggestions"
-
-                    else
-                        Html.ul []
-                            (suggestedPayments
-                                |> List.map
-                                    (\( payerId, receiverId, amount ) ->
-                                        Html.li []
-                                            [ Html.text <|
-                                                "payer="
-                                                    ++ (participantModel.idToName |> Participant.lookupName payerId)
-                                                    ++ ", receiver="
-                                                    ++ (participantModel.idToName |> Participant.lookupName receiverId)
-                                                    ++ ", amount="
-                                                    ++ String.fromAmount amount
-                                            ]
-                                    )
-                            )
-                  ]
-                , [ Html.h3 [] [ text "Balances" ]
-                  , viewBalances participantModel.idToName model
-                  ]
                 ]
         , div [ Html.Attributes.class "col-4" ]
             [ div [ Html.Attributes.class "card" ]
@@ -344,8 +325,8 @@ viewAdd participantModel model =
                         -- but then "prevent default" also needs to be enabled to actually prevent a URL change.
                         -- I'm amazed that JSON decoding must be involved to do this, but it seems to be the case...
                         [ Html.Attributes.href "#"
-                        , Html.Events.preventDefaultOn "click"
-                            (Json.Decode.succeed ( CreatePaymentApplySuggestedAmount amount, True ))
+                        , Html.Events.preventDefaultOn "click" <|
+                            Json.Decode.succeed ( CreatePaymentApplySuggestedAmount amount, True )
                         ]
                         [ text <| "Suggestested amount: " ++ (amount |> String.fromAmount) ]
                     ]
@@ -462,13 +443,14 @@ viewSummaryList participants perspective computed =
                     )
 
 
-viewBalances : Dict Int String -> Model -> Html Msg
-viewBalances participants model =
+viewBalances : Dict Int String -> Dict Int (List ( Int, Float )) -> Model -> Html Msg
+viewBalances participants suggestedPayments model =
     Html.table [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Balance" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Suggested payments" ]
                 ]
             ]
         , Html.Keyed.node "tbody"
@@ -504,6 +486,29 @@ viewBalances participants model =
                                 , Html.tr []
                                     [ Html.td [] [ text participantName ]
                                     , Html.td [] [ text amount ]
+                                    , Html.td []
+                                        -- TODO Don't compute from view, put properly in model.
+                                        (suggestedPayments
+                                            |> Dict.get participantId
+                                            |> Maybe.unwrap []
+                                                (List.map
+                                                    (\( receiverId, suggestedAmount ) ->
+                                                        div []
+                                                            [ Html.a
+                                                                [ Html.Attributes.href "#"
+                                                                , Html.Events.preventDefaultOn "click" <|
+                                                                    Json.Decode.succeed ( ApplySuggestedPayment participantId receiverId suggestedAmount, True )
+                                                                ]
+                                                                [ Html.text <|
+                                                                    "Pay "
+                                                                        ++ String.fromAmount suggestedAmount
+                                                                        ++ " to "
+                                                                        ++ (participants |> Participant.lookupName receiverId)
+                                                                ]
+                                                            ]
+                                                    )
+                                                )
+                                        )
                                     ]
                                 )
                             )
@@ -737,14 +742,7 @@ update msg model =
                     ( model, Cmd.none )
 
                 Ok payment ->
-                    ( { model
-                        | payments =
-                            model.payments ++ [ payment ]
-                        , paymentBalance =
-                            model.paymentBalance
-                                |> updatePaymentBalances payment.payer payment.receiver payment.amount
-                        , nextPaymentId = id + 1
-                      }
+                    ( model |> addPayment payment (id + 1)
                     , Update.delegate CloseModal
                     )
 
@@ -768,6 +766,18 @@ update msg model =
                     , Dom.focus createModalOpenId |> Task.attempt DomMsg
                     )
 
+        ApplySuggestedPayment payerId receiverId amount ->
+            ( model
+                |> addPayment
+                    { id = model.nextPaymentId |> String.fromInt
+                    , payer = payerId
+                    , receiver = receiverId
+                    , amount = amount
+                    }
+                    (model.nextPaymentId + 1)
+            , Cmd.none
+            )
+
         LayoutMsg layoutMsg ->
             case layoutMsg of
                 -- Must explicitly reset the modal for Firefox to render selects correctly on next open.
@@ -789,6 +799,18 @@ update msg model =
                             ""
             in
             ( model, Cmd.none )
+
+
+addPayment : Payment -> Int -> Model -> Model
+addPayment payment nextId model =
+    { model
+        | payments =
+            model.payments ++ [ payment ]
+        , paymentBalance =
+            model.paymentBalance
+                |> updatePaymentBalances payment.payer payment.receiver payment.amount
+        , nextPaymentId = nextId
+    }
 
 
 findSuggestedPayment : Dict Int Float -> Maybe ( ( Int, Float ), ( Int, Float ) )
@@ -814,14 +836,15 @@ findSuggestedPayment totalBalances =
             Nothing
 
 
-autosuggestPayments : Dict Int Float -> List ( Int, Int, Float )
+autosuggestPayments : Dict Int Float -> Dict Int (List ( Int, Float ))
 autosuggestPayments totalBalances =
     case autosuggestPayment totalBalances of
         Nothing ->
-            []
+            Dict.empty
 
-        Just (( payerId, receiverId, amount ) as result) ->
-            result :: autosuggestPayments (totalBalances |> updatePaymentBalances payerId receiverId amount)
+        Just ( payerId, receiverId, amount ) ->
+            autosuggestPayments (totalBalances |> updatePaymentBalances payerId receiverId amount)
+                |> Dict.update payerId (Maybe.withDefault [] >> (::) ( receiverId, amount ) >> Just)
 
 
 autosuggestPayment : Dict Int Float -> Maybe ( Int, Int, Float )
