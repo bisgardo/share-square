@@ -584,8 +584,8 @@ expensesFromList =
         Dict.empty
 
 
-invert : Expenses -> Debt
-invert =
+invertExpenses : Expenses -> Debt
+invertExpenses =
     Dict.foldl
         (\payer payerExpenses result ->
             Dict.foldl
@@ -628,7 +628,7 @@ update msg model =
                         expensesFromList expenseList
 
                     debts =
-                        invert expenses
+                        invertExpenses expenses
 
                     balance =
                         participantIds
@@ -867,25 +867,63 @@ addPayment payment nextId model =
     }
 
 
-findSuggestedPayment : Dict Int Float -> Maybe ( ( Int, Float ), ( Int, Float ) )
-findSuggestedPayment =
-    Dict.foldl
-        (\participantId participantBalance result ->
-            case result of
-                Nothing ->
-                    Just ( ( participantId, participantBalance ), ( participantId, participantBalance ) )
+findExtremaBalanceParticipants : Dict Float (List Int) -> Maybe ( ( Int, Float ), ( Int, Float ) )
+findExtremaBalanceParticipants balances =
+    case findExactMatch balances of
+        Just ( payerId, receiverId, balance ) ->
+            Just ( ( payerId, balance ), ( receiverId, -balance ) )
 
-                Just ( ( _, minAmount ) as minResult, ( _, maxAmount ) as maxResult ) ->
-                    if participantBalance < minAmount then
-                        Just ( ( participantId, participantBalance ), maxResult )
+        Nothing ->
+            let
+                minBalance =
+                    balances
+                        |> Dict.foldr
+                            (\balance participantIds result ->
+                                case participantIds of
+                                    participantId :: _ ->
+                                        Just ( participantId, balance )
 
-                    else if participantBalance > maxAmount then
-                        Just ( minResult, ( participantId, participantBalance ) )
+                                    _ ->
+                                        result
+                            )
+                            Nothing
 
-                    else
-                        result
-        )
-        Nothing
+                maxBalance =
+                    balances
+                        |> Dict.foldl
+                            (\balance participantIds result ->
+                                case participantIds of
+                                    participantId :: _ ->
+                                        Just ( participantId, balance )
+
+                                    _ ->
+                                        result
+                            )
+                            Nothing
+            in
+            Maybe.map2 Tuple.pair minBalance maxBalance
+
+
+findExactMatch : Dict Float (List Int) -> Maybe ( Int, Int, Float )
+findExactMatch amountToIds =
+    amountToIds
+        |> Dict.foldl
+            (\balance payerIds result ->
+                payerIds
+                    |> List.head
+                    |> Maybe.andThen
+                        (\payerId ->
+                            amountToIds
+                                |> Dict.get -balance
+                                |> Maybe.andThen
+                                    (List.head
+                                        >> Maybe.map
+                                            (\receiverId -> ( payerId, receiverId, balance ))
+                                    )
+                        )
+                    |> Maybe.or result
+            )
+            Nothing
 
 
 autosuggestPayments : Dict Int Float -> Dict Int (List ( Int, Float ))
@@ -903,7 +941,8 @@ autosuggestPayments totalBalances =
 
 autosuggestPayment : Dict Int Float -> Maybe ( Int, Int, Float )
 autosuggestPayment =
-    findSuggestedPayment
+    invertBalances
+        >> findExtremaBalanceParticipants
         >> Maybe.andThen
             (\( ( minParticipant, minBalance ), ( maxParticipant, maxBalance ) ) ->
                 let
@@ -917,6 +956,25 @@ autosuggestPayment =
                 else
                     Just ( minParticipant, maxParticipant, debt )
             )
+
+
+invertBalances : Dict Int Float -> Dict Float (List Int)
+invertBalances =
+    Dict.foldl
+        (\key value result ->
+            if value == 0 then
+                -- Ignore participants with zero balance.
+                result
+
+            else
+                result
+                    |> Dict.update value
+                        (Maybe.withDefault []
+                            >> (::) key
+                            >> Just
+                        )
+        )
+        Dict.empty
 
 
 sumBalances : Int -> Dict Int Float -> Dict Int Float -> Float
