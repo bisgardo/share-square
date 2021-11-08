@@ -814,48 +814,49 @@ addPayment payment nextId model =
 
 
 findSuggestedPayment : Dict Int Float -> Maybe ( ( Int, Float ), ( Int, Float ) )
-findSuggestedPayment totalBalances =
-    -- TODO Invert to Dict Float (List Int) to simplify the fold below and also checking for exact matches.
-    totalBalances
-        |> Dict.foldl
-            (\participantId participantBalance result ->
-                case result of
-                    Nothing ->
-                        Just ( ( participantId, participantBalance ), ( participantId, participantBalance ) )
+findSuggestedPayment =
+    Dict.foldl
+        (\participantId participantBalance result ->
+            case result of
+                Nothing ->
+                    Just ( ( participantId, participantBalance ), ( participantId, participantBalance ) )
 
-                    Just ( ( _, minAmount ) as minResult, ( _, maxAmount ) as maxResult ) ->
-                        if participantBalance < minAmount then
-                            Just ( ( participantId, participantBalance ), maxResult )
+                Just ( ( _, minAmount ) as minResult, ( _, maxAmount ) as maxResult ) ->
+                    if participantBalance < minAmount then
+                        Just ( ( participantId, participantBalance ), maxResult )
 
-                        else if participantBalance > maxAmount then
-                            Just ( minResult, ( participantId, participantBalance ) )
+                    else if participantBalance > maxAmount then
+                        Just ( minResult, ( participantId, participantBalance ) )
 
-                        else
-                            result
-            )
-            Nothing
+                    else
+                        result
+        )
+        Nothing
 
 
 autosuggestPayments : Dict Int Float -> Dict Int (List ( Int, Float ))
 autosuggestPayments totalBalances =
-    case autosuggestPayment totalBalances of
+    case totalBalances |> autosuggestPayment of
         Nothing ->
             Dict.empty
 
         Just ( payerId, receiverId, amount ) ->
-            autosuggestPayments (totalBalances |> updatePaymentBalances payerId receiverId amount)
+            totalBalances
+                |> updatePaymentBalances payerId receiverId amount
+                |> autosuggestPayments
                 |> Dict.update payerId (Maybe.withDefault [] >> (::) ( receiverId, amount ) >> Just)
 
 
 autosuggestPayment : Dict Int Float -> Maybe ( Int, Int, Float )
-autosuggestPayment totalBalances =
-    findSuggestedPayment totalBalances
-        |> Maybe.andThen
+autosuggestPayment =
+    findSuggestedPayment
+        >> Maybe.andThen
             (\( ( minParticipant, minBalance ), ( maxParticipant, maxBalance ) ) ->
                 let
                     debt =
                         min maxBalance -minBalance
                 in
+                -- TODO Should really do if |debt| < epsilon?
                 if debt == 0 then
                     Nothing
 
