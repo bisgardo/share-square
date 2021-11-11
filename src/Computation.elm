@@ -182,6 +182,7 @@ view participantModel model =
             ]
         ]
 
+-- TODO Move down.
 
 viewPayments : Participant.Model -> Model -> List (Html Msg)
 viewPayments participantModel model =
@@ -487,9 +488,11 @@ viewBalances participants suggestedPayments model =
                                     [ Html.td [] [ text participantName ]
                                     , Html.td [] [ text amount ]
                                     , Html.td []
-                                        -- TODO Don't compute from view, put properly in model.
+                                        -- TODO Don't compute from view, put properly in precomputed model.
+                                        --      Or use lazy HTML?
                                         (suggestedPayments
                                             |> Dict.get participantId
+                                            -- TODO Sort by name.
                                             |> Maybe.unwrap []
                                                 (List.map
                                                     (\( receiverId, suggestedAmount ) ->
