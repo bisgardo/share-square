@@ -182,7 +182,10 @@ view participantModel model =
             ]
         ]
 
+
+
 -- TODO Move down.
+
 
 viewPayments : Participant.Model -> Model -> List (Html Msg)
 viewPayments participantModel model =
@@ -489,27 +492,35 @@ viewBalances participants suggestedPayments model =
                                     , Html.td [] [ text amount ]
                                     , Html.td []
                                         -- TODO Don't compute from view, put properly in precomputed model.
-                                        --      Or use lazy HTML?
+                                        --      ... or use lazy HTML?
                                         (suggestedPayments
                                             |> Dict.get participantId
-                                            -- TODO Sort by name.
                                             |> Maybe.unwrap []
                                                 (List.map
                                                     (\( receiverId, suggestedAmount ) ->
-                                                        div []
-                                                            [ Html.a
-                                                                [ Html.Attributes.href "#"
-                                                                , Html.Events.preventDefaultOn "click" <|
-                                                                    Json.Decode.succeed ( ApplySuggestedPayment participantId receiverId suggestedAmount, True )
-                                                                ]
-                                                                [ Html.text <|
-                                                                    "Pay "
-                                                                        ++ String.fromAmount suggestedAmount
-                                                                        ++ " to "
-                                                                        ++ (participants |> Participant.lookupName receiverId)
-                                                                ]
-                                                            ]
+                                                        ( participants |> Participant.lookupName receiverId
+                                                        , receiverId
+                                                        , suggestedAmount
+                                                        )
                                                     )
+                                                    -- Sort by name, then ID.
+                                                    >> List.sort
+                                                    >> List.map
+                                                        (\( receiverName, receiverId, suggestedAmount ) ->
+                                                            div []
+                                                                [ Html.a
+                                                                    [ Html.Attributes.href "#"
+                                                                    , Html.Events.preventDefaultOn "click" <|
+                                                                        Json.Decode.succeed ( ApplySuggestedPayment participantId receiverId suggestedAmount, True )
+                                                                    ]
+                                                                    [ Html.text <|
+                                                                        "Pay "
+                                                                            ++ String.fromAmount suggestedAmount
+                                                                            ++ " to "
+                                                                            ++ receiverName
+                                                                    ]
+                                                                ]
+                                                        )
                                                 )
                                         )
                                     ]
