@@ -7,7 +7,6 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Layout exposing (..)
-import Participant
 
 
 type alias Flags =
@@ -19,19 +18,12 @@ type alias Model =
     { environment : String
     , expense : Expense.Model
     , computation : Computation.Model
-    , state : State
     }
-
-
-type State
-    = Expenses
-    | Settlement
 
 
 type Msg
     = ExpenseMsg Expense.Msg
     | ComputationMsg Computation.Msg
-    | SetState State
 
 
 main : Program Flags Model Msg
@@ -56,7 +48,6 @@ init flags =
     ( { environment = flags.environment
       , expense = expenseModel
       , computation = computationModel
-      , state = Expenses
       }
     , Cmd.batch
         [ expenseCmd |> Cmd.map ExpenseMsg
@@ -110,7 +101,6 @@ viewContent model =
                 , data "bs-toggle" "tab"
                 , data "bs-target" ("#" ++ tabIds.expenses)
                 , Html.Attributes.class "nav-link active"
-                , SetState Expenses |> Html.Events.onClick
                 ]
                 [ Html.text "Expenses" ]
             ]
@@ -120,21 +110,21 @@ viewContent model =
                  , data "bs-toggle" "tab"
                  , data "bs-target" ("#" ++ tabIds.settlement)
                  , Html.Attributes.class "nav-link"
-                 , SetState Settlement |> Html.Events.onClick
+                 , Computation.EnableComputation
+                    (model.expense.participant.participants |> List.map .id)
+                    model.expense.expenses
+                    |> ComputationMsg
+                    |> Html.Events.onClick
                  ]
-                    ++ (case model.computation.computed of
-                            Nothing ->
+                    ++ (if List.isEmpty model.expense.expenses then
                                 [ Html.Attributes.class " disabled" ]
-
-                            Just _ ->
+                        else
                                 []
                        )
                 )
-                [ case model.computation.computed of
-                    Nothing ->
+                [ if List.isEmpty model.expense.expenses then
                         Html.i [] [ Html.text "Nothing to settle yet..." ]
-
-                    Just _ ->
+                    else
                         Html.text "Settlement"
                 ]
             ]
@@ -180,11 +170,7 @@ update msg model =
                 ( newComputationModel, newComputationCmd ) =
                     if recompute then
                         model.computation
-                            |> Computation.update
-                                (Computation.RecomputeBalance
-                                    (model.expense.participant.participants |> List.map .id)
-                                    newExpenseModel.expenses
-                                )
+                            |> Computation.update Computation.DisableComputation
 
                     else
                         ( model.computation, Cmd.none )
@@ -207,6 +193,3 @@ update msg model =
             ( { model | computation = newComputationModel }
             , newComputationCmd |> Cmd.map ComputationMsg
             )
-
-        SetState state ->
-            ( { model | state = state }, Cmd.none )

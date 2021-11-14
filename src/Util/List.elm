@@ -14,8 +14,8 @@ indexedFind test list =
             )
 
 
-withoutFirst : (a -> Bool) -> List a -> ( Maybe a, List a )
-withoutFirst test list =
+withoutFirstMatch : (a -> Bool) -> List a -> ( Maybe a, List a )
+withoutFirstMatch test list =
     case list of
         [] ->
             ( Nothing, list )
@@ -25,4 +25,4 @@ withoutFirst test list =
                 ( Just first, rest )
 
             else
-                withoutFirst test rest |> Tuple.mapSecond ((::) first)
+                withoutFirstMatch test rest |> Tuple.mapSecond ((::) first)

@@ -460,8 +460,8 @@ update msg model =
                 ( newParticipantModel, newParticipantCmd ) =
                     Participant.update participantMsg model.participant
             in
-            ( ( { model | participant = newParticipantModel }, False )
-            , Cmd.map ParticipantMsg newParticipantCmd
+            ( ( { model | participant = newParticipantModel }, True )
+            , newParticipantCmd |> Cmd.map ParticipantMsg
             )
 
 
