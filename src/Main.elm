@@ -105,28 +105,38 @@ viewContent model =
                 [ Html.text "Expenses" ]
             ]
         , Html.li [ Html.Attributes.class "nav-item" ]
-            [ Html.button
-                ([ Html.Attributes.type_ "button"
-                 , data "bs-toggle" "tab"
-                 , data "bs-target" ("#" ++ tabIds.settlement)
-                 , Html.Attributes.class "nav-link"
-                 , Computation.EnableComputation
-                    (model.expense.participant.participants |> List.map .id)
-                    model.expense.expenses
-                    |> ComputationMsg
-                    |> Html.Events.onClick
-                 ]
-                    ++ (if List.isEmpty model.expense.expenses then
-                                [ Html.Attributes.class " disabled" ]
-                        else
-                                []
-                       )
-                )
-                [ if List.isEmpty model.expense.expenses then
-                        Html.i [] [ Html.text "Nothing to settle yet..." ]
-                    else
-                        Html.text "Settlement"
-                ]
+            [ let
+                disableSettlementTab =
+                    model.expense.expenses |> List.isEmpty
+              in
+              if disableSettlementTab then
+                Html.span
+                    [ data "bs-toggle" "tooltip"
+                    , data "bs-placement" "right"
+                    , Html.Attributes.title "Add expenses to enable settlement"
+                    , Html.Attributes.tabindex 0
+                    ]
+                    [ Html.button
+                        [ Html.Attributes.type_ "button"
+                        , Html.Attributes.class "nav-link"
+                        , Html.Attributes.class "disabled"
+                        ]
+                        [ Html.text "Settlement" ]
+                    ]
+
+              else
+                Html.button
+                    [ Html.Attributes.type_ "button"
+                    , data "bs-toggle" "tab"
+                    , data "bs-target" ("#" ++ tabIds.settlement)
+                    , Html.Attributes.class "nav-link"
+                    , Computation.EnableComputation
+                        (model.expense.participant.participants |> List.map .id)
+                        model.expense.expenses
+                        |> ComputationMsg
+                        |> Html.Events.onClick
+                    ]
+                    [ Html.text "Settlement" ]
             ]
         ]
     , Html.div [ Html.Attributes.class "tab-content" ]

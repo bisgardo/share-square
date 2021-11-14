@@ -9,26 +9,41 @@ import { Modal, Tooltip } from 'bootstrap';
 // Import all the Elm code.
 import { Elm } from './Main.elm';
 
+const initTooltip = element => {
+//    console.debug('initializing tooltip on element', element);
+    return new Tooltip(element);
+};
+
+const destroyTooltip = element => {
+//    console.debug('destroying tooltip on element', element);
+    return Tooltip.getInstance(element).dispose();
+};
+
+const TOOLTIP_SELECTOR = '[data-bs-toggle="tooltip"]';
+
 // Manage tooltips: Listen for DOM mutation events that nodes with tooltips
 // are being added or removed.
 const observer = new MutationObserver(mutations =>
     mutations.forEach(mutation => {
         mutation.addedNodes.forEach(node => {
             if (node.nodeType === Node.ELEMENT_NODE) {
-                node.querySelectorAll('[data-bs-toggle="tooltip"]')
-                    .forEach(element => new Tooltip(element));
+                if (node.matches(TOOLTIP_SELECTOR)) {
+                    initTooltip(node);
+                }
+                node.querySelectorAll(TOOLTIP_SELECTOR).forEach(initTooltip);
             }
         });
         mutation.removedNodes.forEach(node => {
             if (node.nodeType === Node.ELEMENT_NODE) {
-                node.querySelectorAll('[data-bs-toggle="tooltip"]')
-                    .forEach(element => Tooltip.getInstance(element).dispose());
+                if (node.matches(TOOLTIP_SELECTOR)) {
+                    destroyTooltip(node);
+                }
+                node.querySelectorAll(TOOLTIP_SELECTOR).forEach(destroyTooltip);
             }
         });
     })
 ).observe(document.body, {childList: true, subtree: true});
 
-console.log(observer);
 const app = Elm.Main.init({
     node: document.getElementById('app'),
     flags: {
@@ -46,6 +61,6 @@ window.addEventListener('hidden.bs.modal', event => {
     app.ports.modalClosed.send(modalId);
 });
 app.ports.closeModal.subscribe(id => {
-	const element = document.getElementById(id);
+    const element = document.getElementById(id);
     Modal.getInstance(element).hide();
 });

@@ -236,13 +236,30 @@ view model =
 
 viewCreateOpen : Model -> Html Msg
 viewCreateOpen model =
-    openModalButton
-        createModalOpenId
-        createModalId
-        "Add expense"
-        [ Html.Attributes.disabled (model.participant.participants |> List.isEmpty)
-        , Html.Events.onClick LoadCreate
-        ]
+    let
+        disabled =
+            model.participant.participants |> List.isEmpty
+
+        html =
+            openModalButton
+                createModalOpenId
+                createModalId
+                "Add expense"
+                [ Html.Attributes.disabled disabled
+                , Html.Events.onClick LoadCreate
+                ]
+    in
+    if disabled then
+        Html.span
+            [ data "bs-toggle" "tooltip"
+            , data "bs-placement" "right"
+            , Html.Attributes.title "Add participants to enable expenses"
+            , Html.Attributes.tabindex 0
+            ]
+            [ html ]
+
+    else
+        html
 
 
 viewCreateModal : Model -> Html Msg
