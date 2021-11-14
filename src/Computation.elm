@@ -119,6 +119,7 @@ type alias ComputedModel =
     { expenses : Expenses
     , debts : Expenses
     , balance : Dict Int Float
+    , suggestedPayments : Dict Int (List ( Int, Float ))
     }
 
 
@@ -137,7 +138,8 @@ type SummaryPerspective
 
 type Msg
     = SetSummaryPerspective SummaryPerspective
-    | RecomputeBalance (List Int) (List Expense)
+    | DisableComputation
+    | EnableComputation (List Int) (List Expense)
     | LoadCreate (List Int)
     | CloseModal
     | CreatePaymentEditPayer String
@@ -153,20 +155,11 @@ type Msg
 
 view : Participant.Model -> Model -> Html Msg
 view participantModel model =
-    let
-        suggestedPayments =
-            autosuggestPayments
-                -- The result value of sumValues only contains keys from the first argument.
-                (Dict.sumValues
-                    (model.computed |> Maybe.unwrap Dict.empty .balance)
-                    model.paymentBalance
-                )
-    in
     row
         [ div [ Html.Attributes.class "col" ] <|
             List.concat
                 [ [ Html.h3 [] [ text "Balances" ]
-                  , viewBalances participantModel.idToName suggestedPayments model
+                  , viewBalances participantModel.idToName model
                   ]
                 , [ Html.h3 [] [ text "Payments" ]
                   ]
@@ -447,8 +440,8 @@ viewSummaryList participants perspective computed =
                     )
 
 
-viewBalances : Dict Int String -> Dict Int (List ( Int, Float )) -> Model -> Html Msg
-viewBalances participants suggestedPayments model =
+viewBalances : Dict Int String -> Model -> Html Msg
+viewBalances participants model =
     Html.table [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -461,71 +454,70 @@ viewBalances participants suggestedPayments model =
             []
             (model.computed
                 |> Maybe.unwrap []
-                    (.balance
-                        >> Dict.toList
-                        >> List.map
-                            (\( participantId, expendedAmount ) ->
-                                let
-                                    participantName =
-                                        lookupName participantId participants
+                    (\computed ->
+                        computed.balance
+                            |> Dict.toList
+                            |> List.map
+                                (\( participantId, expendedAmount ) ->
+                                    let
+                                        participantName =
+                                            lookupName participantId participants
 
-                                    paymentBalance =
-                                        model.paymentBalance
-                                            |> Dict.get participantId
-                                            |> Maybe.withDefault 0
+                                        paymentBalance =
+                                            model.paymentBalance
+                                                |> Dict.get participantId
+                                                |> Maybe.withDefault 0
 
-                                    totalBalance =
-                                        expendedAmount + paymentBalance
-                                in
-                                ( participantName
-                                , participantId
-                                , totalBalance |> String.fromAmountSigned
+                                        totalBalance =
+                                            expendedAmount + paymentBalance
+                                    in
+                                    ( participantName
+                                    , participantId
+                                    , totalBalance |> String.fromAmountSigned
+                                    )
                                 )
-                            )
-                        -- Sort by name, then ID.
-                        >> List.sort
-                        >> List.map
-                            (\( participantName, participantId, amount ) ->
-                                ( participantId |> String.fromInt
-                                , Html.tr []
-                                    [ Html.td [] [ text participantName ]
-                                    , Html.td [] [ text amount ]
-                                    , Html.td []
-                                        -- TODO Don't compute from view, put properly in precomputed model.
-                                        --      ... or use lazy HTML?
-                                        (suggestedPayments
-                                            |> Dict.get participantId
-                                            |> Maybe.unwrap []
-                                                (List.map
-                                                    (\( receiverId, suggestedAmount ) ->
-                                                        ( participants |> Participant.lookupName receiverId
-                                                        , receiverId
-                                                        , suggestedAmount
+                            -- Sort by name, then ID.
+                            >> List.sort
+                            >> List.map
+                                (\( participantName, participantId, amount ) ->
+                                    ( participantId |> String.fromInt
+                                    , Html.tr []
+                                        [ Html.td [] [ text participantName ]
+                                        , Html.td [] [ text amount ]
+                                        , Html.td []
+                                            (computed.suggestedPayments
+                                                |> Dict.get participantId
+                                                |> Maybe.unwrap []
+                                                    (List.map
+                                                        (\( receiverId, suggestedAmount ) ->
+                                                            ( participants |> Participant.lookupName receiverId
+                                                            , receiverId
+                                                            , suggestedAmount
+                                                            )
                                                         )
+                                                        -- Sort by name, then ID.
+                                                        >> List.sort
+                                                        >> List.map
+                                                            (\( receiverName, receiverId, suggestedAmount ) ->
+                                                                div []
+                                                                    [ Html.a
+                                                                        [ Html.Attributes.href "#"
+                                                                        , Html.Events.preventDefaultOn "click" <|
+                                                                            Json.Decode.succeed ( ApplySuggestedPayment participantId receiverId suggestedAmount, True )
+                                                                        ]
+                                                                        [ Html.text <|
+                                                                            "Pay "
+                                                                                ++ String.fromAmount suggestedAmount
+                                                                                ++ " to "
+                                                                                ++ receiverName
+                                                                        ]
+                                                                    ]
+                                                            )
                                                     )
-                                                    -- Sort by name, then ID.
-                                                    >> List.sort
-                                                    >> List.map
-                                                        (\( receiverName, receiverId, suggestedAmount ) ->
-                                                            div []
-                                                                [ Html.a
-                                                                    [ Html.Attributes.href "#"
-                                                                    , Html.Events.preventDefaultOn "click" <|
-                                                                        Json.Decode.succeed ( ApplySuggestedPayment participantId receiverId suggestedAmount, True )
-                                                                    ]
-                                                                    [ Html.text <|
-                                                                        "Pay "
-                                                                            ++ String.fromAmount suggestedAmount
-                                                                            ++ " to "
-                                                                            ++ receiverName
-                                                                    ]
-                                                                ]
-                                                        )
-                                                )
-                                        )
-                                    ]
+                                            )
+                                        ]
+                                    )
                                 )
-                            )
                     )
             )
         ]
@@ -611,33 +603,45 @@ update msg model =
         SetSummaryPerspective value ->
             ( { model | summaryPerspective = value }, Cmd.none )
 
-        RecomputeBalance participantIds expenseList ->
-            let
-                expenses =
-                    expensesFromList expenseList
+        DisableComputation ->
+            ( { model | computed = Nothing }, Cmd.none )
 
-                debts =
-                    invert expenses
+        EnableComputation participantIds expenseList ->
+            -- TODO Instead of enable/disable, detect if the expense list actually changed and only recompute if it did.
+            --      If only the participant list changed, just add/remove the relevant balance entries.
+            if Maybe.isJust model.computed then
+                ( model, Cmd.none )
 
-                balance =
-                    participantIds
-                        |> List.foldl
-                            (\participant ->
-                                (Dict.valueSum participant expenses - Dict.valueSum participant debts)
-                                    |> Dict.insert participant
-                            )
-                            Dict.empty
-            in
-            ( { model
-                | computed =
-                    Just
-                        { expenses = expenses
-                        , debts = debts
-                        , balance = balance
-                        }
-              }
-            , Cmd.none
-            )
+            else
+                let
+                    expenses =
+                        expensesFromList expenseList
+
+                    debts =
+                        invert expenses
+
+                    balance =
+                        participantIds
+                            |> List.foldl
+                                (\participant ->
+                                    (Dict.valueSum participant expenses - Dict.valueSum participant debts)
+                                        |> Dict.insert participant
+                                )
+                                Dict.empty
+                in
+                ( { model
+                    | computed =
+                        Just
+                            { expenses = expenses
+                            , debts = debts
+                            , balance = balance
+                            , suggestedPayments =
+                                -- The result value of sumValues only contains keys from the first argument.
+                                autosuggestPayments (Dict.sumValues balance model.paymentBalance)
+                            }
+                  }
+                , Cmd.none
+                )
 
         LoadCreate participants ->
             ( { model
@@ -771,11 +775,23 @@ update msg model =
                     ( model, Cmd.none )
 
                 ( Just payment, newPayments ) ->
-                    ( { model
-                        | payments = newPayments
-                        , paymentBalance =
+                    let
+                        paymentBalance =
                             model.paymentBalance
                                 |> updatePaymentBalances payment.receiver payment.payer payment.amount
+                    in
+                    ( { model
+                        | payments = newPayments
+                        , paymentBalance = paymentBalance
+                        , computed =
+                            model.computed
+                                |> Maybe.map
+                                    (\computed ->
+                                        { computed
+                                            | suggestedPayments =
+                                                autosuggestPayments (Dict.sumValues computed.balance paymentBalance)
+                                        }
+                                    )
                       }
                     , Dom.focus createModalOpenId |> Task.attempt DomMsg
                     )
@@ -817,12 +833,26 @@ update msg model =
 
 addPayment : Payment -> Int -> Model -> Model
 addPayment payment nextId model =
-    { model
-        | payments =
+    let
+        payments =
             model.payments ++ [ payment ]
-        , paymentBalance =
+
+        paymentBalance =
             model.paymentBalance
                 |> updatePaymentBalances payment.payer payment.receiver payment.amount
+    in
+    { model
+        | payments = payments
+        , paymentBalance = paymentBalance
+        , computed =
+            model.computed
+                |> Maybe.map
+                    (\computed ->
+                        { computed
+                            | suggestedPayments =
+                                autosuggestPayments (Dict.sumValues computed.balance paymentBalance)
+                        }
+                    )
         , nextPaymentId = nextId
     }
 
