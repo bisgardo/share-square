@@ -110,7 +110,7 @@ viewContent model =
                     model.expense.expenses |> List.isEmpty
               in
               if disableSettlementTab then
-                Html.span
+                Html.div
                     [ data "bs-toggle" "tooltip"
                     , data "bs-placement" "right"
                     , Html.Attributes.title "Add expenses to enable settlement"
@@ -120,6 +120,7 @@ viewContent model =
                         [ Html.Attributes.type_ "button"
                         , Html.Attributes.class "nav-link"
                         , Html.Attributes.class "disabled"
+                        , Html.Attributes.disabled True
                         ]
                         [ Html.text "Settlement" ]
                     ]

@@ -250,7 +250,7 @@ viewCreateOpen model =
                 ]
     in
     if disabled then
-        Html.span
+        Html.div
             [ data "bs-toggle" "tooltip"
             , data "bs-placement" "right"
             , Html.Attributes.title "Add participants to enable expenses"
