@@ -473,7 +473,7 @@ viewBalances participants model =
                                     in
                                     ( participantName
                                     , participantId
-                                    , totalBalance |> String.fromAmountSigned
+                                    , totalBalance
                                     )
                                 )
                             -- Sort by name, then ID.
@@ -481,9 +481,19 @@ viewBalances participants model =
                             >> List.map
                                 (\( participantName, participantId, amount ) ->
                                     ( participantId |> String.fromInt
-                                    , Html.tr []
+                                    , Html.tr
+                                        [ Html.Attributes.class <|
+                                            if amount < 0 then
+                                                "text-danger"
+
+                                            else if amount > 0 then
+                                                "text-success"
+
+                                            else
+                                                "text-decoration-line-through"
+                                        ]
                                         [ Html.td [] [ text participantName ]
-                                        , Html.td [] [ text amount ]
+                                        , Html.td [] [ text (amount |> String.fromAmount) ]
                                         , Html.td []
                                             (computed.suggestedPayments
                                                 |> Dict.get participantId
