@@ -4,13 +4,12 @@ import Amount exposing (Amount)
 import Browser.Dom as Dom
 import Config exposing (Config)
 import Dict exposing (Dict)
-import Expense exposing (Expense)
+import Domain exposing (Payment, lookupBalance, normalizePayment, suggestPaymentAmount, updatePaymentBalances)
+import Expense
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
 import Html.Keyed
-import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import List.Extra as List
 import Maybe.Extra as Maybe
@@ -36,47 +35,6 @@ type alias Model =
     }
 
 
-type alias Payment =
-    { id : Int
-    , payer : Int
-    , receiver : Int
-    , amount : Amount
-    , done : Bool
-    }
-
-
-decoder : Decoder Payment
-decoder =
-    Decode.map5
-        (\id payerId amount receiverId done ->
-            { id = id
-            , payer = payerId
-            , amount = amount
-            , receiver = receiverId
-            , done = done
-            }
-        )
-        -- ID
-        (Decode.field "i" Decode.int)
-        -- payer ID
-        (Decode.field "p" Decode.int)
-        -- amount
-        (Decode.field "a" Amount.decoder)
-        -- receiver ID
-        (Decode.field "r" Decode.int)
-        -- done?
-        (Decode.field "d" <| Decode.bool)
-
-
-encode : Payment -> Value
-encode payment =
-    [ ( "i", payment.id |> Encode.int )
-    , ( "p", payment.payer |> Encode.int )
-    , ( "a", payment.amount |> Amount.encode )
-    , ( "r", payment.receiver |> Encode.int )
-    , ( "d", payment.done |> Encode.bool )
-    ]
-        |> Encode.object
 
 
 import_ : List Payment -> Model -> Model
@@ -733,17 +691,6 @@ update config balances msg model =
             ( ( model, False ), Cmd.none )
 
 
-normalizePayment : Payment -> Payment
-normalizePayment result =
-    if result.amount < 0 then
-        { result
-            | payer = result.receiver
-            , receiver = result.payer
-            , amount = -result.amount
-        }
-
-    else
-        result
 
 
 validatePaymentAmount : Amount -> Feedback
@@ -753,115 +700,3 @@ validatePaymentAmount amount =
 
     else
         None
-
-
-findSuggestedPayment : Dict Int Amount -> Maybe ( ( Int, Amount ), ( Int, Amount ) )
-findSuggestedPayment =
-    Dict.foldl
-        (\participantId participantBalance result ->
-            case result of
-                Nothing ->
-                    Just ( ( participantId, participantBalance ), ( participantId, participantBalance ) )
-
-                Just ( ( _, minAmount ) as minResult, ( _, maxAmount ) as maxResult ) ->
-                    if participantBalance < minAmount then
-                        Just ( ( participantId, participantBalance ), maxResult )
-
-                    else if participantBalance > maxAmount then
-                        Just ( minResult, ( participantId, participantBalance ) )
-
-                    else
-                        result
-        )
-        Nothing
-
-
-autosuggestPayments : Dict Int Amount -> Dict Int (List ( Int, Amount ))
-autosuggestPayments totalBalances =
-    case totalBalances |> autosuggestPayment of
-        Nothing ->
-            Dict.empty
-
-        Just ( payerId, receiverId, amount ) ->
-            totalBalances
-                |> updatePaymentBalances payerId receiverId amount
-                |> autosuggestPayments
-                |> Dict.update payerId
-                    (Maybe.withDefault []
-                        >> (::) ( receiverId, amount )
-                        >> Just
-                    )
-
-
-autosuggestPayment : Dict Int Amount -> Maybe ( Int, Int, Amount )
-autosuggestPayment =
-    findSuggestedPayment
-        >> Maybe.andThen
-            (\( ( minParticipant, minBalance ), ( maxParticipant, maxBalance ) ) ->
-                let
-                    debt =
-                        min maxBalance -minBalance
-                in
-                -- TODO Should really do if |debt| < epsilon?
-                if debt == 0 then
-                    Nothing
-
-                else
-                    Just ( minParticipant, maxParticipant, debt )
-            )
-
-
-sumBalances : Int -> Dict Int Amount -> Dict Int Amount -> Amount
-sumBalances participantId paymentBalance balance =
-    (balance |> lookupBalance participantId) + (paymentBalance |> lookupBalance participantId)
-
-
-lookupBalance : Int -> Dict Int Amount -> Amount
-lookupBalance participantId =
-    Dict.get participantId >> Maybe.withDefault 0
-
-
-suggestPaymentAmount : String -> String -> Dict Int Amount -> Dict Int Amount -> Result ( Maybe Int, Maybe Int ) Amount
-suggestPaymentAmount payer receiver paymentBalance balance =
-    let
-        payerId =
-            payer |> String.toInt |> Maybe.withDefault 0
-
-        receiverId =
-            receiver |> String.toInt |> Maybe.withDefault 0
-
-        payerBalance =
-            sumBalances payerId paymentBalance balance
-
-        receiverBalance =
-            sumBalances receiverId paymentBalance balance
-
-        suggestedAmount =
-            min -payerBalance receiverBalance
-    in
-    if suggestedAmount <= 0 then
-        Err
-            ( if payerBalance >= 0 then
-                Just payerId
-
-              else
-                Nothing
-            , if receiverBalance <= 0 then
-                Just receiverId
-
-              else
-                Nothing
-            )
-
-    else
-        Ok suggestedAmount
-
-
-updatePaymentBalances : Int -> Int -> Amount -> Dict Int Amount -> Dict Int Amount
-updatePaymentBalances payerId receiverId amount =
-    updatePaymentBalance payerId amount >> updatePaymentBalance receiverId -amount
-
-
-updatePaymentBalance : Int -> Amount -> Dict Int Amount -> Dict Int Amount
-updatePaymentBalance participantId amount =
-    Dict.update participantId (Maybe.withDefault 0 >> (+) amount >> Just)

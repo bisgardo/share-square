@@ -1,40 +1,14 @@
 module Participant exposing (..)
 
 import Dict exposing (Dict)
+import Domain exposing (Participant, newParticipant)
 import Html exposing (Html, text)
 import Html.Attributes
 import Html.Events exposing (onSubmit)
-import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Set exposing (Set)
 import Util.Update as Update
-
-
-type alias Participant =
-    { id : Int
-    , name : String
-    , nameLowercase : String -- used for case-insensitive sorting
-    }
-
-
-decoder : Decoder Participant
-decoder =
-    Decode.map2
-        new
-        -- ID
-        (Decode.field "i" Decode.int)
-        -- name
-        (Decode.field "n" Decode.string)
-
-
-encode : Participant -> Value
-encode participant =
-    [ ( "i", participant.id |> Encode.int )
-    , ( "n", participant.name |> Encode.string )
-    ]
-        |> Encode.object
 
 
 toField : Participant -> Field
@@ -256,15 +230,7 @@ create id name =
         Err "cannot create participant with empty name"
 
     else
-        Ok <| new id (name |> cleanName)
-
-
-new : Int -> String -> Participant
-new id name =
-    { id = id
-    , name = name
-    , nameLowercase = name |> String.toLower
-    }
+        Ok <| newParticipant id (name |> cleanName)
 
 
 cleanName : String -> String

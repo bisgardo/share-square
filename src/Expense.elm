@@ -5,16 +5,15 @@ import Browser.Dom as Dom
 import Config exposing (Config)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
+import Domain exposing (Expense, Participant)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events
 import Html.Keyed
-import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Participant exposing (Participant)
+import Participant
 import Set exposing (Set)
 import Task
 import Util.Dict as Dict
@@ -65,58 +64,6 @@ type alias CreateModel =
     , receivers : Dict String Float -- TODO should just be Set
     , editId : Maybe Int
     }
-
-
-type alias Expense =
-    { id : Int
-    , payer : Int
-    , amount : Amount
-    , description : String
-    , receivers : Dict Int Float -- map from participant ID to fractional part
-    }
-
-
-decoder : Decoder Expense
-decoder =
-    Decode.map5
-        Expense
-        -- ID
-        (Decode.field "i" Decode.int)
-        -- payer ID
-        (Decode.field "p" Decode.int)
-        -- amount
-        (Decode.field "a" Decode.int)
-        -- description
-        (Decode.maybe (Decode.field "d" Decode.string) |> Decode.map (Maybe.withDefault ""))
-        -- receivers
-        (Decode.field "r"
-            (Decode.list Decode.int
-                |> Decode.map
-                    (List.map (\id -> ( id, 1 )) >> Dict.fromList)
-            )
-        )
-
-
-encode : Expense -> Value
-encode expense =
-    [ Just ( "i", expense.id |> Encode.int )
-    , Just ( "p", expense.payer |> Encode.int )
-    , Just ( "a", expense.amount |> Amount.encode )
-    , if expense.description |> String.isEmpty then
-        Nothing
-
-      else
-        Just ( "d", expense.description |> Encode.string )
-    , Just
-        ( "r"
-        , expense.receivers
-            |> Dict.toList
-            |> List.map Tuple.first
-            |> Encode.list Encode.int
-        )
-    ]
-        |> Maybe.values
-        |> Encode.object
 
 
 import_ : List Participant -> List Expense -> Model -> Model
