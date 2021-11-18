@@ -12,3 +12,9 @@ chain msg update ( model, cmd ) =
 delegate : msg -> Cmd msg
 delegate =
     Task.succeed >> Task.perform identity
+
+withCmd : Cmd msg -> a -> (a, Cmd msg)
+withCmd cmd model = (model, cmd)
+
+withoutCmd : a -> (a, Cmd msg)
+withoutCmd = withCmd Cmd.none
