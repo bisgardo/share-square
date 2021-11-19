@@ -131,7 +131,7 @@ viewContent model =
                     , data "bs-toggle" "tab"
                     , data "bs-target" ("#" ++ tabIds.settlement)
                     , Html.Attributes.class "nav-link"
-                    , Computation.EnableComputation
+                    , Computation.Enable
                         (model.expense.participant.participants |> List.map .id)
                         model.expense.expenses
                         |> ComputationMsg
@@ -181,7 +181,7 @@ update msg model =
                 ( newComputationModel, newComputationCmd ) =
                     if recompute then
                         model.computation
-                            |> Computation.update Computation.DisableComputation
+                            |> Computation.update Computation.Disable
 
                     else
                         ( model.computation, Cmd.none )

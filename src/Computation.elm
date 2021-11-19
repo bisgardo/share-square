@@ -51,14 +51,9 @@ type SummaryPerspective
 
 type Msg
     = SetSummaryPerspective SummaryPerspective
-    | DisableComputation
-    | EnableComputation (List Int) (List Expense)
+    | Disable
+    | Enable (List Int) (List Expense)
     | PaymentMsg Payment.Msg
-
-
-
---| LayoutMsg Layout.Msg
---| DomMsg (Result Dom.Error ())
 
 
 view : Participant.Model -> Model -> Html Msg
@@ -365,10 +360,10 @@ update msg model =
         SetSummaryPerspective value ->
             ( { model | summaryPerspective = value }, Cmd.none )
 
-        DisableComputation ->
+        Disable ->
             ( { model | computed = Nothing }, Cmd.none )
 
-        EnableComputation participantIds expenseList ->
+        Enable participantIds expenseList ->
             -- TODO Instead of enable/disable, detect if the expense list actually changed and only recompute if it did.
             --      If only the participant list changed, just add/remove the relevant balance entries.
             if Maybe.isJust model.computed then
