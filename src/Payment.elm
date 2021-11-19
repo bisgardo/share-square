@@ -48,7 +48,7 @@ create id model =
         payerResult =
             case model.payerId |> String.toInt of
                 Nothing ->
-                    Err ("unexpected non-integer key '" ++ model.payerId ++ "' of payer")
+                    Err <| "unexpected non-integer key '" ++ model.payerId ++ "' of payer"
 
                 Just payerId ->
                     Ok payerId
@@ -56,7 +56,7 @@ create id model =
         receiverResult =
             case model.receiverId |> String.toInt of
                 Nothing ->
-                    Err ("unexpected non-integer key '" ++ model.receiverId ++ "' of receiver")
+                    Err <| "unexpected non-integer key '" ++ model.receiverId ++ "' of receiver"
 
                 Just payerId ->
                     Ok payerId
@@ -64,7 +64,7 @@ create id model =
         amountResult =
             case model.amount.value |> String.toFloat of
                 Nothing ->
-                    Err ("cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number")
+                    Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
                 Just amount ->
                     Ok amount
@@ -117,12 +117,12 @@ type alias CreateModel =
 type Msg
     = LoadCreate (List Int)
     | CloseModal
-    | CreatePaymentEditPayer String
-    | CreatePaymentEditReceiver String
-    | CreatePaymentEditAmount String
-    | CreatePaymentApplySuggestedAmount Float
-    | CreatePaymentSubmit
-    | DeletePayment String
+    | CreateEditPayer String
+    | CreateEditReceiver String
+    | CreateEditAmount String
+    | CreateApplySuggestedAmount Float
+    | CreateSubmit
+    | Delete String
     | ApplySuggestedPayment Int Int Float
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
@@ -152,7 +152,7 @@ view participantModel model =
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
                             , Html.td [] [ Html.text (payment.amount |> String.fromAmount) ]
                             , Html.td
-                                [ Html.Attributes.align "right", Html.Events.onClick (DeletePayment payment.id) ]
+                                [ Html.Attributes.align "right", Html.Events.onClick (Delete payment.id) ]
                                 [ Html.a
                                     [ data "bs-toggle" "tooltip"
                                     , data "bs-placement" "left"
@@ -197,7 +197,7 @@ viewCreateModal participantModel model =
                     )
     in
     Html.form
-        [ Html.Events.onSubmit CreatePaymentSubmit ]
+        [ Html.Events.onSubmit CreateSubmit ]
         [ modal createModalId "Add payment" body disable ]
 
 
@@ -243,12 +243,12 @@ viewAdd participantModel model =
         "Payer"
         { fields = participantsFields, feedback = payerFeedback }
         model.payerId
-        CreatePaymentEditPayer
+        CreateEditPayer
     , optionsInput "new-payments-receiver"
         "Receiver"
         { fields = participantsFields, feedback = receiverFeedback }
         model.receiverId
-        CreatePaymentEditReceiver
+        CreateEditReceiver
     , div
         ([ Html.Attributes.class "row mb-3" ]
             ++ (if Maybe.isNothing suggestedAmount then
@@ -271,12 +271,12 @@ viewAdd participantModel model =
                         -- I'm amazed that JSON decoding must be involved to do this, but it seems to be the case...
                         [ Html.Attributes.href "#"
                         , Html.Events.preventDefaultOn "click" <|
-                            Json.Decode.succeed ( CreatePaymentApplySuggestedAmount amount, True )
+                            Json.Decode.succeed ( CreateApplySuggestedAmount amount, True )
                         ]
                         [ text <| "Suggestested amount: " ++ (amount |> String.fromAmount) ]
                     ]
         ]
-    , textInput "Amount" model.amount CreatePaymentEditAmount
+    , textInput "Amount" model.amount CreateEditAmount
     ]
 
 
@@ -306,7 +306,7 @@ update balances msg model =
         CloseModal ->
             ( ( model, False ), closeModal createModalId )
 
-        CreatePaymentEditPayer payerId ->
+        CreateEditPayer payerId ->
             ( ( { model
                     | create =
                         model.create
@@ -330,7 +330,7 @@ update balances msg model =
             , Cmd.none
             )
 
-        CreatePaymentEditReceiver receiverId ->
+        CreateEditReceiver receiverId ->
             ( ( { model
                     | create =
                         model.create
@@ -354,7 +354,7 @@ update balances msg model =
             , Cmd.none
             )
 
-        CreatePaymentEditAmount amount ->
+        CreateEditAmount amount ->
             ( ( { model
                     | create =
                         model.create
@@ -378,7 +378,7 @@ update balances msg model =
             , Cmd.none
             )
 
-        CreatePaymentApplySuggestedAmount amount ->
+        CreateApplySuggestedAmount amount ->
             ( model
             , case model.create of
                 Nothing ->
@@ -388,10 +388,10 @@ update balances msg model =
                     Dom.focus createModel.amount.key |> Task.attempt DomMsg
             )
                 |> Update.chain
-                    (amount |> String.fromAmount |> CreatePaymentEditAmount)
+                    (amount |> String.fromAmount |> CreateEditAmount)
                     (update balances)
 
-        CreatePaymentSubmit ->
+        CreateSubmit ->
             let
                 id =
                     model.nextPaymentId
@@ -415,7 +415,7 @@ update balances msg model =
                     , Update.delegate CloseModal
                     )
 
-        DeletePayment paymentId ->
+        Delete paymentId ->
             case model.payments |> List.withoutFirstMatch (.id >> (==) paymentId) of
                 ( Nothing, _ ) ->
                     -- Should never happen.
@@ -493,6 +493,7 @@ addPayment payment nextId model =
         , nextPaymentId = nextId
     }
 
+
 findSuggestedPayment : Dict Int Float -> Maybe ( ( Int, Float ), ( Int, Float ) )
 findSuggestedPayment =
     Dict.foldl
@@ -524,7 +525,11 @@ autosuggestPayments totalBalances =
             totalBalances
                 |> updatePaymentBalances payerId receiverId amount
                 |> autosuggestPayments
-                |> Dict.update payerId (Maybe.withDefault [] >> (::) ( receiverId, amount ) >> Just)
+                |> Dict.update payerId
+                    (Maybe.withDefault []
+                        >> (::) ( receiverId, amount )
+                        >> Just
+                    )
 
 
 autosuggestPayment : Dict Int Float -> Maybe ( Int, Int, Float )
