@@ -245,7 +245,8 @@ viewCreateOpen model =
                 createModalOpenId
                 createModalId
                 "Add expense"
-                [ Html.Attributes.disabled disabled
+                [ Html.Attributes.class "w-100"
+                , Html.Attributes.disabled disabled
                 , Html.Events.onClick LoadCreate
                 ]
     in
