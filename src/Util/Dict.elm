@@ -27,21 +27,6 @@ sumValues source target =
         source
 
 
-toFlatList : Dict a (Dict b c) -> List ( a, b, c )
-toFlatList =
-    Dict.toList
-        >> List.map
-            (\( outerKey, innerDict ) ->
-                innerDict
-                    |> Dict.toList
-                    |> List.map
-                        (\( innerKey, value ) ->
-                            ( outerKey, innerKey, value )
-                        )
-            )
-        >> List.concat
-
-
 valueSum : comparable -> Dict comparable (Dict b number) -> number
 valueSum key =
     Dict.get key

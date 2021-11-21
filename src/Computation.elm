@@ -7,7 +7,6 @@ import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Json.Decode
-import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
 import Payment
@@ -16,8 +15,7 @@ import Util.String as String
 
 
 type alias Model =
-    { summaryPerspective : SummaryPerspective
-    , computed : Maybe ComputedModel
+    { computed : Maybe ComputedModel
     , payment : Payment.Model
     }
 
@@ -28,8 +26,7 @@ init =
         ( paymentModel, paymentCmd ) =
             Payment.init
     in
-    ( { summaryPerspective = SummaryPerspectiveOutlays
-      , computed = Nothing
+    ( { computed = Nothing
       , payment = paymentModel
       }
     , paymentCmd |> Cmd.map PaymentMsg
@@ -44,147 +41,20 @@ type alias ComputedModel =
     }
 
 
-type SummaryPerspective
-    = SummaryPerspectiveOutlays
-    | SummaryPerspectiveDebt
-
-
 type Msg
-    = SetSummaryPerspective SummaryPerspective
-    | Disable
+    = Disable
     | Enable (List Int) (List Expense)
     | PaymentMsg Payment.Msg
 
 
 view : Participant.Model -> Model -> Html Msg
 view participantModel model =
-    row
-        [ div [ Html.Attributes.class "col" ] <|
-            List.concat
-                [ [ Html.h3 [] [ text "Balances" ]
-                  , viewBalances participantModel.idToName model
-                  ]
-                , [ Html.h3 [] [ text "Payments" ]
-                  ]
-                , Payment.view participantModel model.payment |> List.map (Html.map PaymentMsg)
-                ]
-        , div [ Html.Attributes.class "col-4" ]
-            [ div [ Html.Attributes.class "card" ]
-                [ div [ Html.Attributes.class "card-header" ]
-                    [ text "Summary (before payments)" ]
-                , div [ Html.Attributes.class "card-body" ] <|
-                    viewSummary participantModel.idToName model
-                ]
-            ]
+    div [ Html.Attributes.class "col" ] <|
+        [ Html.h3 [] [ text "Balances" ]
+        , viewBalances participantModel.idToName model
+        , Html.h3 [] [ text "Payments" ]
         ]
-
-
-viewSummary : Dict Int String -> Model -> List (Html Msg)
-viewSummary participants model =
-    [ div [ Html.Attributes.class "form-check form-check-inline" ]
-        [ Html.input
-            [ Html.Attributes.class "form-check-input"
-            , Html.Attributes.id "computation-summary-outlay"
-            , Html.Attributes.name "computation-summary"
-            , Html.Attributes.type_ "radio"
-            , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveOutlays)
-            , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveOutlays)
-            ]
-            []
-        , Html.label
-            [ Html.Attributes.class "form-check-label"
-            , Html.Attributes.for "computation-summary-outlay"
-            ]
-            [ text "Outlays" ]
-        ]
-    , div [ Html.Attributes.class "form-check form-check-inline" ]
-        [ Html.input
-            [ Html.Attributes.class "form-check-input"
-            , Html.Attributes.id "computation-summary-debt"
-            , Html.Attributes.name "computation-summary"
-            , Html.Attributes.type_ "radio"
-            , Html.Attributes.checked (model.summaryPerspective == SummaryPerspectiveDebt)
-            , Html.Events.onCheck (always <| SetSummaryPerspective SummaryPerspectiveDebt)
-            ]
-            []
-        , Html.label
-            [ Html.Attributes.class "form-check-label"
-            , Html.Attributes.for "computation-summary-debt"
-            ]
-            [ text "Debt" ]
-        ]
-    , Html.hr [] []
-    , case model.computed of
-        Nothing ->
-            Html.p [] [ Html.em [] [ text "No result available yet." ] ]
-
-        Just computed ->
-            viewSummaryList participants model.summaryPerspective computed
-    ]
-
-
-viewSummaryList : Dict Int String -> SummaryPerspective -> ComputedModel -> Html Msg
-viewSummaryList participants perspective computed =
-    case perspective of
-        SummaryPerspectiveOutlays ->
-            if computed.expenses |> Dict.isEmpty then
-                Html.p [] [ Html.i [] [ text "None." ] ]
-
-            else
-                Html.ul []
-                    (computed.expenses
-                        |> Dict.toFlatList
-                        |> List.map
-                            (\( payer, receiver, amount ) ->
-                                ( participants |> lookupName payer
-                                , participants |> lookupName receiver
-                                , amount |> String.fromAmount
-                                )
-                            )
-                        |> List.sort
-                        |> List.map
-                            (\( payer, receiver, amount ) ->
-                                Html.li []
-                                    [ text <|
-                                        payer
-                                            ++ " has expended "
-                                            ++ amount
-                                            ++ " for "
-                                            ++ receiver
-                                            ++ "."
-                                    ]
-                            )
-                    )
-
-        SummaryPerspectiveDebt ->
-            if computed.debts |> Dict.isEmpty then
-                Html.p [] [ Html.i [] [ text "None." ] ]
-
-            else
-                Html.ul []
-                    (computed.debts
-                        |> Dict.toFlatList
-                        |> List.map
-                            (\( receiver, payer, amount ) ->
-                                ( lookupName receiver participants
-                                , lookupName payer participants
-                                , amount |> String.fromAmount
-                                )
-                            )
-                        |> List.sort
-                        |> List.map
-                            (\( receiver, payer, amount ) ->
-                                Html.li []
-                                    [ text <|
-                                        receiver
-                                            ++ " owes "
-                                            ++ payer
-                                            ++ " "
-                                            ++ amount
-                                            ++ "."
-                                    ]
-                            )
-                    )
+            ++ (Payment.view participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
 viewBalances : Dict Int String -> Model -> Html Msg
@@ -357,9 +227,6 @@ subscriptions =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        SetSummaryPerspective value ->
-            ( { model | summaryPerspective = value }, Cmd.none )
-
         Disable ->
             ( { model | computed = Nothing }, Cmd.none )
 

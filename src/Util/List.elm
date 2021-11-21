@@ -1,18 +1,5 @@
 module Util.List exposing (..)
 
-import List.Extra as List
-
-
-indexedFind : (a -> Bool) -> List a -> Maybe ( Int, a )
-indexedFind test list =
-    list
-        |> List.findIndex test
-        |> Maybe.andThen
-            (\index ->
-                List.getAt index list
-                    |> Maybe.map (\element -> ( index, element ))
-            )
-
 
 withoutFirstMatch : (a -> Bool) -> List a -> ( Maybe a, List a )
 withoutFirstMatch test list =
