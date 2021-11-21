@@ -240,7 +240,7 @@ viewBalances participants model =
                                                 "text-decoration-line-through"
                                         ]
                                         [ Html.td [] [ text participantName ]
-                                        , Html.td [] [ text (amount |> String.fromAmount) ]
+                                        , Html.td [] [ text (amount |> String.fromAmountSigned) ]
                                         , Html.td []
                                             (computed.suggestedPayments
                                                 |> Dict.get participantId
