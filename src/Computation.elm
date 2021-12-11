@@ -41,6 +41,14 @@ type alias ComputedModel =
     }
 
 
+import_ : List Payment.Payment -> Model -> Model
+import_ payments model =
+    { model
+        | computed = Nothing
+        , payment = model.payment |> Payment.import_ payments
+    }
+
+
 type Msg
     = Disable
     | Enable (List Int) (List Expense)
@@ -64,6 +72,8 @@ viewBalances participants model =
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Balance" ]
+
+                -- TODO Add "apply all" link.
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Suggested payments" ]
                 ]
             ]
@@ -130,7 +140,14 @@ viewBalances participants model =
                                                                     [ Html.a
                                                                         [ Html.Attributes.href "#"
                                                                         , Html.Events.preventDefaultOn "click" <|
-                                                                            Json.Decode.succeed ( Payment.ApplySuggestedPayment participantId receiverId suggestedAmount |> PaymentMsg, True )
+                                                                            Json.Decode.succeed
+                                                                                ( Payment.ApplySuggestedPayment
+                                                                                    participantId
+                                                                                    receiverId
+                                                                                    suggestedAmount
+                                                                                    |> PaymentMsg
+                                                                                , True
+                                                                                )
                                                                         ]
                                                                         [ Html.text <|
                                                                             "Pay "
@@ -224,17 +241,17 @@ subscriptions =
     .payment >> Payment.subscriptions >> Sub.map PaymentMsg
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
+update : Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update msg model =
     case msg of
         Disable ->
-            ( { model | computed = Nothing }, Cmd.none )
+            ( ( { model | computed = Nothing }, False ), Cmd.none )
 
         Enable participantIds expenseList ->
             -- TODO Instead of enable/disable, detect if the expense list actually changed and only recompute if it did.
             --      If only the participant list changed, just add/remove the relevant balance entries.
             if Maybe.isJust model.computed then
-                ( model, Cmd.none )
+                ( ( model, False ), Cmd.none )
 
             else
                 let
@@ -253,40 +270,44 @@ update msg model =
                                 )
                                 Dict.empty
                 in
-                ( { model
-                    | computed =
-                        Just
-                            { expenses = expenses
-                            , debts = debts
-                            , balance = balance
-                            , suggestedPayments =
-                                -- The result value of sumValues only contains keys from the first argument.
-                                Payment.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
-                            }
-                  }
+                ( ( { model
+                        | computed =
+                            Just
+                                { expenses = expenses
+                                , debts = debts
+                                , balance = balance
+                                , suggestedPayments =
+                                    -- The result value of sumValues only contains keys from the first argument.
+                                    Payment.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
+                                }
+                    }
+                  , True
+                  )
                 , Cmd.none
                 )
 
         PaymentMsg paymentMsg ->
             let
-                ( ( newPaymentModel, recompute ), newPaymentCmd ) =
+                ( ( paymentModel, modelChanged ), paymentCmd ) =
                     model.payment |> Payment.update (model.computed |> Maybe.map .balance) paymentMsg
             in
-            ( { model
-                | payment = newPaymentModel
-                , computed =
-                    if recompute then
-                        model.computed
-                            |> Maybe.map
-                                (\computed ->
-                                    { computed
-                                        | suggestedPayments =
-                                            Payment.autosuggestPayments (Dict.sumValues computed.balance newPaymentModel.paymentBalance)
-                                    }
-                                )
+            ( ( { model
+                    | payment = paymentModel
+                    , computed =
+                        if modelChanged then
+                            model.computed
+                                |> Maybe.map
+                                    (\computed ->
+                                        { computed
+                                            | suggestedPayments =
+                                                Payment.autosuggestPayments (Dict.sumValues computed.balance paymentModel.paymentBalance)
+                                        }
+                                    )
 
-                    else
-                        model.computed
-              }
-            , newPaymentCmd |> Cmd.map PaymentMsg
+                        else
+                            model.computed
+                }
+              , modelChanged
+              )
+            , paymentCmd |> Cmd.map PaymentMsg
             )

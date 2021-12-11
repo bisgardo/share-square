@@ -72,3 +72,21 @@ But porting a large chunk of Bootstrap's Javascript to Elm or littering the code
 is not an option for this project.
 
 These are the reasons for the caveat mentioned [above](#serve).
+
+## Storage
+
+The app currently offers the options of not persisting the state at all or persisting it in the Browser's local storage.
+All the state is kept in a single field (`data`) as a single JSON document.
+Due to reasonably tight (and seemingly non-uniform) space constraints,
+an attempt has been made to make this document as small as possible.
+
+The data is prefixed by the schema version (currently "1")
+and separated from the data using a marker '|'.
+This version is used to determine if the app will be able to decode the data
+(and in the future determine which decoder to use).
+
+Other from the data itself, a "revision" number is stored under another key `data@revision`.
+This number is incremented on each write and is used to determine if changes have been made in another browser tab.
+If so, the write is rejected.
+Currently, this is only reported in the console log and the only way to recover
+is to refresh the state by doing a full page reload.

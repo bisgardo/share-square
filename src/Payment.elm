@@ -7,7 +7,8 @@ import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
 import Html.Keyed
-import Json.Decode
+import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Participant
@@ -29,7 +30,7 @@ type alias Model =
     { create : Maybe CreateModel
     , payments : List Payment
     , paymentBalance : Dict Int Float
-    , nextPaymentId : Int
+    , nextPaymentId : Int -- TODO rename to 'nextId'
     }
 
 
@@ -38,6 +39,55 @@ type alias Payment =
     , payer : Int
     , receiver : Int
     , amount : Float
+    }
+
+
+decoder : Decoder Payment
+decoder =
+    Decode.map4
+        (\id payerId amount receiverId ->
+            { id = id
+            , payer = payerId
+            , amount = amount
+            , receiver = receiverId
+            }
+        )
+        -- ID
+        (Decode.field "i" Decode.string)
+        -- payer ID
+        (Decode.field "p" Decode.int)
+        -- amount
+        (Decode.field "a" Decode.float)
+        -- receiver ID
+        (Decode.field "r" Decode.int)
+
+
+encode : Payment -> Value
+encode payment =
+    [ ( "i", payment.id |> Encode.string )
+    , ( "p", payment.payer |> Encode.int )
+    , ( "a", payment.amount |> Encode.float )
+    , ( "r", payment.receiver |> Encode.int )
+    ]
+        |> Encode.object
+
+
+import_ : List Payment -> Model -> Model
+import_ payments model =
+    { model
+        | payments = payments
+        , paymentBalance =
+            payments
+                |> List.foldl
+                    (\payment -> updatePaymentBalances payment.payer payment.receiver payment.amount)
+                    model.paymentBalance
+        , nextPaymentId =
+            1
+                + (payments
+                    |> List.foldl
+                        (\payment -> max (payment.id |> String.toInt |> Maybe.withDefault 0))
+                        (model.nextPaymentId - 1)
+                  )
     }
 
 
@@ -272,9 +322,9 @@ viewAdd participantModel model =
                         -- I'm amazed that JSON decoding must be involved to do this, but it seems to be the case...
                         [ Html.Attributes.href "#"
                         , Html.Events.preventDefaultOn "click" <|
-                            Json.Decode.succeed ( CreateApplySuggestedAmount amount, True )
+                            Decode.succeed ( CreateApplySuggestedAmount amount, True )
                         ]
-                        [ text <| "Suggestested amount: " ++ (amount |> String.fromAmount) ]
+                        [ text <| "Suggested amount: " ++ (amount |> String.fromAmount) ]
                     ]
         ]
     , textInput "Amount" model.amount CreateEditAmount
@@ -386,7 +436,7 @@ update balances msg model =
                     Cmd.none
 
                 Just createModel ->
-                    Dom.focus createModel.amount.key |> Task.attempt DomMsg
+                    createModel.amount.key |> Dom.focus |> Task.attempt DomMsg
             )
                 |> Update.chain
                     (amount |> String.fromAmount |> CreateEditAmount)
@@ -438,7 +488,7 @@ update balances msg model =
                         }
                       , True
                       )
-                    , Dom.focus createModalOpenId |> Task.attempt DomMsg
+                    , createModalOpenId |> Dom.focus |> Task.attempt DomMsg
                     )
 
         ApplySuggestedPayment payerId receiverId amount ->

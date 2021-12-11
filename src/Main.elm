@@ -1,12 +1,50 @@
 module Main exposing (main)
 
-import Browser
+import Browser exposing (UrlRequest)
+import Browser.Navigation exposing (Key)
 import Computation
-import Expense
+import Expense exposing (Expense)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Json.Decode as Decode exposing (Decoder, Error)
+import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
+import LocalStorage exposing (Revision)
+import Maybe.Extra as Maybe
+import Participant exposing (Participant)
+import Payment exposing (Payment)
+import Storage
+import Url exposing (Url)
+import Url.Builder
+import Url.Parser exposing ((<?>), Parser)
+import Url.Parser.Query
+import Util.JsonDecode as Decode
+import Util.Update as Update
+
+
+schemaVersion =
+    "1"
+
+
+schemaVersionSplitter =
+    "|"
+
+
+storageDataKey =
+    "data"
+
+
+storageUrlKey =
+    "storage"
+
+
+storageUrlNone =
+    "none"
+
+
+storageUrlLocal =
+    "local"
 
 
 type alias Flags =
@@ -16,29 +54,98 @@ type alias Flags =
 
 type alias Model =
     { environment : String
+    , key : Browser.Navigation.Key
     , expense : Expense.Model
     , computation : Computation.Model
+    , storageMode : Storage.Mode
+    , storageRevision : Int
     }
+
+
+type alias StorageValues =
+    { participants : List Participant
+    , expenses : List Expense
+    , payments : List Payment
+    }
+
+
+modeParser : Parser (Maybe Storage.Mode -> a) a
+modeParser =
+    (Url.Parser.top <?> Url.Parser.Query.string storageUrlKey)
+        |> Url.Parser.map
+            (Maybe.andThen
+                (\value ->
+                    if value == storageUrlNone then
+                        Just Storage.None
+
+                    else if value == storageUrlLocal then
+                        Just Storage.Local
+
+                    else
+                        Nothing
+                )
+            )
+
+
+storageValuesDecoder : Decoder StorageValues
+storageValuesDecoder =
+    Decode.map3
+        StorageValues
+        -- participants
+        (Decode.field "p" <| Decode.nullableList Participant.decoder)
+        -- expenses
+        (Decode.field "e" <| Decode.nullableList Expense.decoder)
+        -- payments
+        (Decode.field "y" <| Decode.nullableList Payment.decoder)
+
+
+encodeStorageValues : StorageValues -> String
+encodeStorageValues values =
+    [ ( "p", values.participants |> Encode.list Participant.encode )
+    , ( "e", values.expenses |> Encode.list Expense.encode )
+    , ( "y", values.payments |> Encode.list Payment.encode )
+    ]
+        |> Encode.object
+        |> Encode.encode 0
+
+
+type SyncDirection
+    = FromStorage
+    | ToStorage
 
 
 type Msg
     = ExpenseMsg Expense.Msg
     | ComputationMsg Computation.Msg
+    | SetMode Storage.Mode SyncDirection
+    | StorageValuesLoaded (Maybe ( Revision, Result String StorageValues ))
+    | StorageValuesStored (Result String Revision)
+    | SyncStorage SyncDirection
+    | UrlRequested UrlRequest
+    | UrlChanged Url
 
 
 main : Program Flags Model Msg
 main =
-    Browser.document
+    Browser.application
         { init = init
         , subscriptions = subscriptions
         , update = update
         , view = view
+        , onUrlChange = UrlChanged
+        , onUrlRequest = UrlRequested
         }
 
 
-init : Flags -> ( Model, Cmd Msg )
-init flags =
+init : Flags -> Url -> Key -> ( Model, Cmd Msg )
+init flags url key =
     let
+        storageMode =
+            Url.Parser.parse modeParser url
+                |> Maybe.join
+                -- Missing or invalid value for "storage" parameter will default to "local".
+                |> Maybe.withDefault Storage.Local
+
         ( expenseModel, expenseCmd ) =
             Expense.init
 
@@ -46,14 +153,18 @@ init flags =
             Computation.init
     in
     ( { environment = flags.environment
+      , key = key
       , expense = expenseModel
       , computation = computationModel
+      , storageMode = storageMode
+      , storageRevision = 0
       }
     , Cmd.batch
         [ expenseCmd |> Cmd.map ExpenseMsg
         , computationCmd |> Cmd.map ComputationMsg
         ]
     )
+        |> Update.chain (SetMode storageMode FromStorage) update
 
 
 subscriptions : Model -> Sub Msg
@@ -64,8 +175,49 @@ subscriptions model =
     , model.computation
         |> Computation.subscriptions
         |> Sub.map ComputationMsg
+    , model.storageMode
+        |> Storage.valueLoaded
+            (\result ->
+                case result of
+                    Nothing ->
+                        StorageValuesLoaded Nothing
+
+                    Just ( _, revision, values ) ->
+                        StorageValuesLoaded
+                            (Just
+                                ( revision
+                                , case extractVersion values of
+                                    Just ( version, data ) ->
+                                        if version == schemaVersion then
+                                            Decode.decodeString storageValuesDecoder data
+                                                |> Result.mapError Decode.errorToString
+
+                                        else
+                                            Err "unknown version"
+
+                                    _ ->
+                                        Err "invalid data format"
+                                )
+                            )
+            )
+    , model.storageMode
+        |> Storage.valueStored
+            (\( _, result ) -> StorageValuesStored result)
     ]
         |> Sub.batch
+
+
+extractVersion : String -> Maybe ( String, String )
+extractVersion string =
+    case string |> String.indexes schemaVersionSplitter of
+        idx :: _ ->
+            Just
+                ( string |> String.left idx
+                , string |> String.dropLeft (idx + 1)
+                )
+
+        _ ->
+            Nothing
 
 
 tabIds =
@@ -87,9 +239,52 @@ viewBody model =
         [ Html.div [ Html.Attributes.class "mb-4" ]
             [ Html.h1 [ Html.Attributes.class "d-inline" ] [ Html.text "Share 'n square" ]
             , Html.p [ Html.Attributes.class "lead d-inline ms-2" ] [ Html.text "Expense calculator" ]
+            , Html.div [ Html.Attributes.class "float-end" ] <| viewStorageModeSelector model.storageMode
             ]
         ]
             ++ viewContent model
+
+
+viewStorageModeSelector : Storage.Mode -> List (Html Msg)
+viewStorageModeSelector mode =
+    [ Html.div [ Html.Attributes.class "form-check form-check-inline" ]
+        [ Html.label
+            [ Html.Attributes.class "form-check-label"
+            , Html.Attributes.for "storage-mode-none"
+            , data "bs-toggle" "tooltip"
+            , data "bs-placement" "bottom"
+            , Html.Attributes.title "Refreshing the browser window will clear all data."
+            ]
+            [ Html.text "No storage"
+            , Html.input
+                [ Html.Attributes.class "form-check-input"
+                , Html.Attributes.id "storage-mode-none"
+                , Html.Attributes.name "storage-mode"
+                , Html.Attributes.type_ "radio"
+                , Html.Attributes.checked (mode == Storage.None)
+                , Html.Events.onCheck (SetMode Storage.None ToStorage |> always)
+                ]
+                []
+            ]
+        ]
+    , Html.div [ Html.Attributes.class "form-check form-check-inline" ]
+        [ Html.label
+            [ Html.Attributes.class "form-check-label"
+            , Html.Attributes.for "storage-mode-localstorage"
+            ]
+            [ Html.text "Use local storage"
+            , Html.input
+                [ Html.Attributes.class "form-check-input"
+                , Html.Attributes.id "storage-mode-localstorage"
+                , Html.Attributes.name "storage-mode"
+                , Html.Attributes.type_ "radio"
+                , Html.Attributes.checked (mode == Storage.Local)
+                , Html.Events.onCheck (SetMode Storage.Local ToStorage |> always)
+                ]
+                []
+            ]
+        ]
+    ]
 
 
 viewContent : Model -> List (Html Msg)
@@ -175,32 +370,137 @@ update msg model =
     case msg of
         ExpenseMsg expenseMsg ->
             let
-                ( ( newExpenseModel, recompute ), newExpensesCmd ) =
+                ( ( expenseModel, expenseModelChanged ), expensesCmd ) =
                     model.expense |> Expense.update expenseMsg
 
-                ( newComputationModel, newComputationCmd ) =
-                    if recompute then
+                ( ( computationModel, computationModelChanged ), computationCmd ) =
+                    if expenseModelChanged then
                         model.computation
                             |> Computation.update Computation.Disable
 
                     else
-                        ( model.computation, Cmd.none )
+                        ( ( model.computation, False ), Cmd.none )
             in
             ( { model
-                | expense = newExpenseModel
-                , computation = newComputationModel
+                | expense = expenseModel
+                , computation = computationModel
               }
             , Cmd.batch
-                [ newExpensesCmd |> Cmd.map ExpenseMsg
-                , newComputationCmd |> Cmd.map ComputationMsg
+                [ if expenseModelChanged || computationModelChanged then
+                    Update.delegate (SyncStorage ToStorage)
+
+                  else
+                    Cmd.none
+                , expensesCmd |> Cmd.map ExpenseMsg
+                , computationCmd |> Cmd.map ComputationMsg
                 ]
             )
 
         ComputationMsg computationMsg ->
             let
-                ( newComputationModel, newComputationCmd ) =
+                ( ( computationModel, modelChanged ), computationCmd ) =
                     model.computation |> Computation.update computationMsg
             in
-            ( { model | computation = newComputationModel }
-            , newComputationCmd |> Cmd.map ComputationMsg
+            ( { model | computation = computationModel }
+            , Cmd.batch
+                [ if modelChanged then
+                    Update.delegate (SyncStorage ToStorage)
+
+                  else
+                    Cmd.none
+                , computationCmd |> Cmd.map ComputationMsg
+                ]
             )
+
+        SetMode mode syncDirection ->
+            case mode of
+                Storage.None ->
+                    ( { model | storageMode = Storage.None, storageRevision = 0 }
+                    , Cmd.batch
+                        [ Storage.deleteValue storageDataKey model.storageMode
+                        , [ Url.Builder.string storageUrlKey storageUrlNone ]
+                            |> Url.Builder.toQuery
+                            |> Browser.Navigation.replaceUrl model.key
+                        ]
+                    )
+
+                Storage.Local ->
+                    ( { model | storageMode = Storage.Local }
+                    , Cmd.batch
+                        [ [ Url.Builder.string storageUrlKey storageUrlLocal ]
+                            |> Url.Builder.toQuery
+                            |> Browser.Navigation.replaceUrl model.key
+                        , Update.delegate (SyncStorage syncDirection)
+                        ]
+                    )
+                    --|> Update.chain (SyncStorage syncDirection) update
+        StorageValuesLoaded result ->
+            case result of
+                Nothing ->
+                    ( model, Cmd.none )
+
+                Just ( revision, loadedValues ) ->
+                    case loadedValues of
+                        Err error ->
+                            let
+                                _ =
+                                    Debug.log "cannot load storage" error
+                            in
+                            ( model, Cmd.none )
+
+                        Ok values ->
+                            ( model |> import_ revision values, Cmd.none )
+
+        StorageValuesStored result ->
+            case result of
+                Err error ->
+                    -- TODO Should (ask the user to) reload the page if it's a revisioning error.
+                    let
+                        _ =
+                            Debug.log "cannot store values" error
+                    in
+                    ( model, Cmd.none )
+
+                Ok revision ->
+                    ( { model | storageRevision = revision }, Cmd.none )
+
+        SyncStorage direction ->
+            ( model
+            , case direction of
+                FromStorage ->
+                    model.storageMode
+                        |> Storage.loadValues storageDataKey
+
+                ToStorage ->
+                    model.storageMode
+                        |> Storage.storeValue storageDataKey
+                            model.storageRevision
+                            (schemaVersion ++ schemaVersionSplitter ++ (model |> export |> encodeStorageValues))
+            )
+
+        UrlRequested _ ->
+            ( model, Cmd.none )
+
+        UrlChanged _ ->
+            ( model, Cmd.none )
+
+
+import_ : Revision -> StorageValues -> Model -> Model
+import_ revision values model =
+    { model
+        | expense =
+            model.expense
+                |> Expense.import_ values.participants values.expenses
+        , computation =
+            model.computation
+                |> Computation.import_ values.payments
+        , storageRevision = revision
+    }
+
+
+export : Model -> StorageValues
+export model =
+    { participants = model.expense.participant.participants
+    , expenses = model.expense.expenses
+    , payments = model.computation.payment.payments
+    }
