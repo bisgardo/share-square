@@ -175,34 +175,31 @@ subscriptions model =
     , model.computation
         |> Computation.subscriptions
         |> Sub.map ComputationMsg
-    , model.storageMode
-        |> Storage.valueLoaded
-            (\result ->
-                case result of
-                    Nothing ->
-                        StorageValuesLoaded Nothing
+    , Storage.valueLoaded
+        (\result ->
+            case result of
+                Nothing ->
+                    StorageValuesLoaded Nothing
 
-                    Just ( _, revision, values ) ->
-                        StorageValuesLoaded
-                            (Just
-                                ( revision
-                                , case extractVersion values of
-                                    Just ( version, data ) ->
-                                        if version == schemaVersion then
-                                            Decode.decodeString storageValuesDecoder data
-                                                |> Result.mapError Decode.errorToString
+                Just ( _, revision, values ) ->
+                    StorageValuesLoaded
+                        (Just
+                            ( revision
+                            , case extractVersion values of
+                                Just ( version, data ) ->
+                                    if version == schemaVersion then
+                                        Decode.decodeString storageValuesDecoder data
+                                            |> Result.mapError Decode.errorToString
 
-                                        else
-                                            Err "unknown version"
+                                    else
+                                        Err "unknown version"
 
-                                    _ ->
-                                        Err "invalid data format"
-                                )
+                                _ ->
+                                    Err "invalid data format"
                             )
-            )
-    , model.storageMode
-        |> Storage.valueStored
-            (\( _, result ) -> StorageValuesStored result)
+                        )
+        )
+    , Storage.valueStored (\( _, result ) -> StorageValuesStored result)
     ]
         |> Sub.batch
 
@@ -430,10 +427,10 @@ update msg model =
                         [ [ Url.Builder.string storageUrlKey storageUrlLocal ]
                             |> Url.Builder.toQuery
                             |> Browser.Navigation.replaceUrl model.key
-                        , Update.delegate (SyncStorage syncDirection)
                         ]
                     )
-                    --|> Update.chain (SyncStorage syncDirection) update
+                        |> Update.chain (SyncStorage syncDirection) update
+
         StorageValuesLoaded result ->
             case result of
                 Nothing ->

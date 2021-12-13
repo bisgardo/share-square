@@ -22,23 +22,16 @@ storeValue id revision value mode =
 
 
 {-| Subscription to listen for value stored to storage.
+Note that the subscription shouldn't depend on the storage mode
+as that would result in a race condition between setting the mode and
+registering the subscription, leading to lost messages and tears.
 -}
-valueStored : (( String, Result String Revision ) -> msg) -> Mode -> Sub msg
-valueStored handler mode =
-    case mode of
-        None ->
-            Sub.none
-
-        Local ->
-            LocalStorage.valueStored
-                (\( id, revision, error ) ->
-                    let
-                        result =
-                            error
-                                |> Maybe.unwrap (Ok revision) Err
-                    in
-                    handler ( id, result )
-                )
+valueStored : (( String, Result String Revision ) -> msg) -> Sub msg
+valueStored handler =
+    LocalStorage.valueStored
+        (\( id, revision, error ) ->
+            handler ( id, error |> Maybe.unwrap (Ok revision) Err )
+        )
 
 
 {-| Send request to load value with the provided ID from storage.
@@ -54,15 +47,13 @@ loadValues id mode =
 
 
 {-| Subscription to listen for value loaded from storage.
+Note that the subscription shouldn't depend on the storage mode
+as that would result in a race condition between setting the mode and
+registering the subscription, leading to lost messages and tears.
 -}
-valueLoaded : (Maybe ( String, Revision, String ) -> msg) -> Mode -> Sub msg
-valueLoaded handler mode =
-    case mode of
-        None ->
-            Sub.none
-
-        Local ->
-            LocalStorage.valueLoaded handler
+valueLoaded : (Maybe ( String, Revision, String ) -> msg) -> Sub msg
+valueLoaded =
+    LocalStorage.valueLoaded
 
 
 {-| Send request to delete value from storage.
