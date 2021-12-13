@@ -7,7 +7,7 @@ import Expense exposing (Expense)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Json.Decode as Decode exposing (Decoder, Error)
+import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import LocalStorage exposing (Revision)
@@ -58,8 +58,28 @@ type alias Model =
     , expense : Expense.Model
     , computation : Computation.Model
     , storageMode : Storage.Mode
-    , storageRevision : Int
+    , storageRevision : Revision
+    , errors : List Error
     }
+
+
+type Error
+    = StorageError StorageError
+
+
+type StorageError
+    = ReadError StorageReadError
+    | WriteError StorageWriteError
+
+
+type StorageReadError
+    = InvalidFormat String
+    | UnknownSchemaVersion String
+    | ParseError String
+
+
+type StorageWriteError
+    = RevisionMismatch Revision Revision
 
 
 type alias StorageValues =
@@ -118,8 +138,8 @@ type Msg
     = ExpenseMsg Expense.Msg
     | ComputationMsg Computation.Msg
     | SetMode Storage.Mode SyncDirection
-    | StorageValuesLoaded (Maybe ( Revision, Result String StorageValues ))
-    | StorageValuesStored (Result String Revision)
+    | StorageValuesLoaded (Maybe ( Revision, Result Error StorageValues ))
+    | StorageValuesStored (Result Revision Revision)
     | SyncStorage SyncDirection
     | UrlRequested UrlRequest
     | UrlChanged Url
@@ -158,6 +178,7 @@ init flags url key =
       , computation = computationModel
       , storageMode = storageMode
       , storageRevision = 0
+      , errors = []
       }
     , Cmd.batch
         [ expenseCmd |> Cmd.map ExpenseMsg
@@ -185,17 +206,20 @@ subscriptions model =
                     StorageValuesLoaded
                         (Just
                             ( revision
-                            , case extractVersion values of
+                            , (case extractVersion values of
                                 Just ( version, data ) ->
                                     if version == schemaVersion then
-                                        Decode.decodeString storageValuesDecoder data
-                                            |> Result.mapError Decode.errorToString
+                                        data
+                                            |> Decode.decodeString storageValuesDecoder
+                                            |> Result.mapError (ParseError << Decode.errorToString)
 
                                     else
-                                        Err "unknown version"
+                                        Err (UnknownSchemaVersion version)
 
                                 _ ->
-                                    Err "invalid data format"
+                                    Err (InvalidFormat values)
+                              )
+                                |> Result.mapError (StorageError << ReadError)
                             )
                         )
         )
@@ -239,6 +263,42 @@ viewBody model =
             , Html.div [ Html.Attributes.class "float-end" ] <| viewStorageModeSelector model.storageMode
             ]
         ]
+            ++ (model.errors
+                    |> List.map
+                        (\error ->
+                            Html.div [ Html.Attributes.class "alert alert-danger", Html.Attributes.attribute "role" "alert" ]
+                                [ Html.text <|
+                                    case error of
+                                        StorageError storageError ->
+                                            "Storage error: "
+                                                ++ (case storageError of
+                                                        ReadError storageReadError ->
+                                                            "Cannot read state: "
+                                                                ++ (case storageReadError of
+                                                                        InvalidFormat message ->
+                                                                            "Invalid data: " ++ message
+
+                                                                        UnknownSchemaVersion version ->
+                                                                            "Unknown schema version \"" ++ version ++ "\""
+
+                                                                        ParseError message ->
+                                                                            "Parse error: " ++ message
+                                                                   )
+
+                                                        WriteError storageWriteError ->
+                                                            "Cannot write state: "
+                                                                ++ (case storageWriteError of
+                                                                        RevisionMismatch storedRevision documentRevision ->
+                                                                            "Revision mismatch (stored state has revision "
+                                                                                ++ (storedRevision |> String.fromInt)
+                                                                                ++ " but the app state has revision "
+                                                                                ++ (documentRevision |> String.fromInt)
+                                                                                ++ "). Reload the page to recover."
+                                                                   )
+                                                   )
+                                ]
+                        )
+               )
             ++ viewContent model
 
 
@@ -439,24 +499,15 @@ update msg model =
                 Just ( revision, loadedValues ) ->
                     case loadedValues of
                         Err error ->
-                            let
-                                _ =
-                                    Debug.log "cannot load storage" error
-                            in
-                            ( model, Cmd.none )
+                            ( { model | errors = model.errors ++ [ error ] }, Cmd.none )
 
                         Ok values ->
                             ( model |> import_ revision values, Cmd.none )
 
         StorageValuesStored result ->
             case result of
-                Err error ->
-                    -- TODO Should (ask the user to) reload the page if it's a revisioning error.
-                    let
-                        _ =
-                            Debug.log "cannot store values" error
-                    in
-                    ( model, Cmd.none )
+                Err storedRevision ->
+                    ( { model | errors = model.errors ++ [ StorageError <| WriteError <| RevisionMismatch storedRevision model.storageRevision ] }, Cmd.none )
 
                 Ok revision ->
                     ( { model | storageRevision = revision }, Cmd.none )

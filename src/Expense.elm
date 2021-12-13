@@ -123,11 +123,12 @@ import_ participants expenses model =
                 |> Participant.import_ participants
         , expenses = expenses
         , nextExpenseId =
-            1 + (expenses
-                |> List.foldl
-                    (\expense -> max (expense.id |> String.toInt |> Maybe.withDefault 0))
-                    (model.nextExpenseId - 1)
-                    )
+            1
+                + (expenses
+                    |> List.foldl
+                        (\expense -> max (expense.id |> String.toInt |> Maybe.withDefault 0))
+                        (model.nextExpenseId - 1)
+                  )
     }
 
 

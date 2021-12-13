@@ -75,7 +75,7 @@ app.ports.loadValue.subscribe(id => {
 app.ports.storeValue.subscribe(([id, documentRevision, value]) => {
     const storedRevision = parseInt(window.localStorage.getItem(revisionKey(id)) || 0);
     if (storedRevision !== documentRevision) {
-        return app.ports.valueStored.send([id, 0, 'revision mismatch: stored=' + storedRevision + ', app=' + documentRevision]);
+        return app.ports.valueStored.send([id, 0, storedRevision]);
     }
     documentRevision++;
     window.localStorage.setItem(revisionKey(id), documentRevision);

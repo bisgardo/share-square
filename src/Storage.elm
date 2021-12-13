@@ -26,7 +26,7 @@ Note that the subscription shouldn't depend on the storage mode
 as that would result in a race condition between setting the mode and
 registering the subscription, leading to lost messages and tears.
 -}
-valueStored : (( String, Result String Revision ) -> msg) -> Sub msg
+valueStored : (( String, Result Revision Revision ) -> msg) -> Sub msg
 valueStored handler =
     LocalStorage.valueStored
         (\( id, revision, error ) ->

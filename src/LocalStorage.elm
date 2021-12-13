@@ -24,7 +24,7 @@ port storeValue : ( String, Revision, String ) -> Cmd msg
 
 {-| Subscription to listen for the revision and error from storing a value in local storage.
 -}
-port valueStored : (( String, Revision, Maybe String ) -> msg) -> Sub msg
+port valueStored : (( String, Revision, Maybe Int ) -> msg) -> Sub msg
 
 
 {-| Send request to delete value from local storage.
