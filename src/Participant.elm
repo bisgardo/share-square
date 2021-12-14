@@ -4,6 +4,8 @@ import Dict exposing (Dict)
 import Html exposing (Html, text)
 import Html.Attributes
 import Html.Events exposing (onSubmit)
+import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Set exposing (Set)
@@ -15,6 +17,24 @@ type alias Participant =
     , name : String
     , nameLowercase : String -- used for case-insensitive sorting
     }
+
+
+decoder : Decoder Participant
+decoder =
+    Decode.map2
+        new
+        -- ID
+        (Decode.field "i" Decode.int)
+        -- name
+        (Decode.field "n" Decode.string)
+
+
+encode : Participant -> Value
+encode participant =
+    [ ( "i", participant.id |> Encode.int )
+    , ( "n", participant.name |> Encode.string )
+    ]
+        |> Encode.object
 
 
 toField : Participant -> Field
@@ -48,14 +68,16 @@ type alias CreateModel =
     }
 
 
-init : Model
+init : ( Model, Cmd Msg )
 init =
-    { create = Nothing
-    , participants = []
-    , idToName = Dict.empty
-    , namesLowercase = Set.empty
-    , nextId = 1
-    }
+    ( { create = Nothing
+      , participants = []
+      , idToName = Dict.empty
+      , namesLowercase = Set.empty
+      , nextId = 1
+      }
+    , Cmd.none
+    )
 
 
 initCreate : CreateModel
@@ -125,36 +147,45 @@ viewCreateModal model =
         ]
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    Sub.none
+
+
+update : Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update msg model =
     case msg of
         LoadCreate ->
-            ( { model
-                | create =
-                    Just initCreate
-              }
+            ( ( { model
+                    | create =
+                        Just initCreate
+                }
+              , False
+              )
             , Cmd.none
             )
 
         CreateUpdate name ->
-            ( { model
-                | create =
-                    model.create
-                        |> Maybe.map
-                            (\createModel ->
-                                let
-                                    nameField =
-                                        createModel.name
-                                in
-                                { createModel
-                                    | name =
-                                        { nameField
-                                            | value = name
-                                            , feedback = validateName model name
-                                        }
-                                }
-                            )
-              }
+            ( ( { model
+                    | create =
+                        model.create
+                            |> Maybe.map
+                                (\createModel ->
+                                    let
+                                        nameField =
+                                            createModel.name
+                                    in
+                                    { createModel
+                                        | name =
+                                            { nameField
+                                                | value = name
+                                                , feedback = validateName model name
+                                            }
+                                    }
+                                )
+                }
+              , False
+              )
             , Cmd.none
             )
 
@@ -176,25 +207,48 @@ update msg model =
                         _ =
                             Debug.log "error" error
                     in
-                    ( model, Cmd.none )
+                    ( ( model, False ), Cmd.none )
 
                 Ok value ->
-                    ( { model
-                        | participants =
-                            model.participants
-                                ++ [ value ]
-                                -- Keep the participant list sorted by name (case insensitively).
-                                |> List.sortBy .nameLowercase
-                        , idToName = model.idToName |> Dict.insert id value.name
-                        , namesLowercase = model.namesLowercase |> Set.insert value.nameLowercase
-                        , create = Nothing
-                        , nextId = id + 1
-                      }
+                    let
+                        -- Keep the participant list sorted by name (case insensitively).
+                        participants =
+                            model.participants ++ [ value ] |> List.sortBy .nameLowercase
+                    in
+                    ( ( { model
+                            | participants = participants
+                            , idToName = model.idToName |> Dict.insert id value.name
+                            , namesLowercase = model.namesLowercase |> Set.insert value.nameLowercase
+                            , create = Nothing
+                            , nextId = id + 1
+                        }
+                      , True
+                      )
                     , Update.delegate CloseModal
                     )
 
         CloseModal ->
-            ( model, closeModal createModalId )
+            ( ( model, False ), closeModal createModalId )
+
+
+import_ : List Participant -> Model -> Model
+import_ participants model =
+    { model
+        | participants = participants
+        , idToName =
+            participants
+                |> List.foldl (\participant -> Dict.insert participant.id participant.name) Dict.empty
+        , namesLowercase =
+            participants
+                |> List.map (.name >> String.toLower)
+                |> Set.fromList
+        , create = Nothing
+        , nextId =
+            1
+                + (participants
+                    |> List.foldl (\participant -> max participant.id) (model.nextId - 1)
+                  )
+    }
 
 
 create : Int -> String -> Result String Participant
@@ -204,15 +258,15 @@ create id name =
         Err "cannot create participant with empty name"
 
     else
-        let
-            cleanedName =
-                name |> cleanName
-        in
-        Ok
-            { id = id
-            , name = cleanedName
-            , nameLowercase = cleanedName |> String.toLower
-            }
+        Ok <| new id (name |> cleanName)
+
+
+new : Int -> String -> Participant
+new id name =
+    { id = id
+    , name = name
+    , nameLowercase = name |> String.toLower
+    }
 
 
 cleanName : String -> String

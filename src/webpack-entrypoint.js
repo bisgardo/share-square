@@ -23,7 +23,7 @@ const TOOLTIP_SELECTOR = '[data-bs-toggle="tooltip"]';
 
 // Manage tooltips: Listen for DOM mutation events that nodes with tooltips
 // are being added or removed.
-const observer = new MutationObserver(mutations =>
+new MutationObserver(mutations =>
     mutations.forEach(mutation => {
         mutation.addedNodes.forEach(node => {
             if (node.nodeType === Node.ELEMENT_NODE) {
@@ -63,4 +63,26 @@ window.addEventListener('hidden.bs.modal', event => {
 app.ports.closeModal.subscribe(id => {
     const element = document.getElementById(id);
     Modal.getInstance(element).hide();
+});
+
+const revisionKey = id => `${id}@revision`
+
+// Ports for local storage I/O.
+app.ports.loadValue.subscribe(id => {
+    const revision = window.localStorage.getItem(revisionKey(id));
+    return app.ports.valueLoaded.send(revision ? [id, parseInt(revision), window.localStorage.getItem(id)] : null);
+});
+app.ports.storeValue.subscribe(([id, documentRevision, value]) => {
+    const storedRevision = parseInt(window.localStorage.getItem(revisionKey(id)) || 0);
+    if (storedRevision !== documentRevision) {
+        return app.ports.valueStored.send([id, 0, storedRevision]);
+    }
+    documentRevision++;
+    window.localStorage.setItem(revisionKey(id), documentRevision);
+    window.localStorage.setItem(id, value);
+    app.ports.valueStored.send([id, documentRevision, null]);
+});
+app.ports.deleteValue.subscribe(id => {
+    window.localStorage.removeItem(revisionKey(id));
+    window.localStorage.removeItem(id);
 });

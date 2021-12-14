@@ -6,7 +6,10 @@ import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events
 import Html.Keyed
+import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
+import Maybe.Extra as Maybe
 import Participant exposing (Participant)
 import Set exposing (Set)
 import Task
@@ -29,12 +32,12 @@ maxDescriptionLength =
 
 type Msg
     = LoadCreate
-    | CreateSubmit
     | CloseModal
     | CreateEditPayer String
     | CreateEditAmount String
     | CreateEditDescription String
     | CreateEditReceiver String Bool
+    | CreateSubmit
     | Delete String
     | LayoutMsg Layout.Msg
     | ParticipantMsg Participant.Msg
@@ -44,8 +47,8 @@ type Msg
 type alias Model =
     { create : Maybe CreateModel
     , expenses : List Expense
-    , participant : Participant.Model -- TODO move back out to module Main
-    , nextExpenseId : Int
+    , participant : Participant.Model
+    , nextExpenseId : Int -- TODO rename to 'nextId'
     }
 
 
@@ -66,6 +69,66 @@ type alias Expense =
     , amount : Float
     , description : String
     , receivers : Dict Int Float -- map from participant ID to fractional part
+    }
+
+
+decoder : Decoder Expense
+decoder =
+    Decode.map5
+        Expense
+        -- ID
+        (Decode.field "i" Decode.string)
+        -- payer ID
+        (Decode.field "p" Decode.int)
+        -- amount
+        (Decode.field "a" Decode.float)
+        -- description
+        (Decode.maybe (Decode.field "d" Decode.string) |> Decode.map (Maybe.withDefault ""))
+        -- receivers
+        (Decode.field "r"
+            (Decode.list Decode.int
+                |> Decode.map
+                    (List.map (\id -> ( id, 1 )) >> Dict.fromList)
+            )
+        )
+
+
+encode : Expense -> Value
+encode expense =
+    [ Just ( "i", expense.id |> Encode.string )
+    , Just ( "p", expense.payer |> Encode.int )
+    , Just ( "a", expense.amount |> Encode.float )
+    , if expense.description |> String.isEmpty then
+        Nothing
+
+      else
+        Just ( "d", expense.description |> Encode.string )
+    , Just
+        ( "r"
+        , expense.receivers
+            |> Dict.toList
+            |> List.map Tuple.first
+            |> Encode.list Encode.int
+        )
+    ]
+        |> Maybe.values
+        |> Encode.object
+
+
+import_ : List Participant -> List Expense -> Model -> Model
+import_ participants expenses model =
+    { model
+        | participant =
+            model.participant
+                |> Participant.import_ participants
+        , expenses = expenses
+        , nextExpenseId =
+            1
+                + (expenses
+                    |> List.foldl
+                        (\expense -> max (expense.id |> String.toInt |> Maybe.withDefault 0))
+                        (model.nextExpenseId - 1)
+                  )
     }
 
 
@@ -117,12 +180,19 @@ create id model =
 
 init : ( Model, Cmd Msg )
 init =
+    let
+        ( participantModel, participantCmd ) =
+            Participant.init
+    in
     ( { create = Nothing
       , expenses = []
-      , participant = Participant.init
+      , participant = participantModel
       , nextExpenseId = 1
       }
-    , Dom.focus Participant.createId |> Task.attempt DomMsg
+    , Cmd.batch
+        [ participantCmd |> Cmd.map ParticipantMsg
+        , Participant.createId |> Dom.focus |> Task.attempt DomMsg
+        ]
     )
 
 
@@ -297,8 +367,11 @@ viewAdd participantModel model =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-    modalClosed ModalClosed |> Sub.map LayoutMsg
+subscriptions model =
+    [ modalClosed ModalClosed |> Sub.map LayoutMsg
+    , model.participant |> Participant.subscriptions |> Sub.map ParticipantMsg
+    ]
+        |> Sub.batch
 
 
 update : Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
@@ -346,8 +419,7 @@ update msg model =
 
                 Ok value ->
                     ( ( { model
-                            | expenses =
-                                model.expenses ++ [ value ]
+                            | expenses = model.expenses ++ [ value ]
                             , nextExpenseId = id + 1
                         }
                       , True
@@ -448,7 +520,7 @@ update msg model =
                 }
               , True
               )
-            , Dom.focus createModalOpenId |> Task.attempt DomMsg
+            , createModalOpenId |> Dom.focus |> Task.attempt DomMsg
             )
 
         LayoutMsg layoutMsg ->
@@ -475,10 +547,10 @@ update msg model =
 
         ParticipantMsg participantMsg ->
             let
-                ( newParticipantModel, newParticipantCmd ) =
+                ( ( participantModel, participantModelChanged ), newParticipantCmd ) =
                     Participant.update participantMsg model.participant
             in
-            ( ( { model | participant = newParticipantModel }, True )
+            ( ( { model | participant = participantModel }, participantModelChanged )
             , newParticipantCmd |> Cmd.map ParticipantMsg
             )
 
