@@ -174,6 +174,7 @@ type Msg
     | CreateSubmit
     | Delete Int
     | ApplySuggestedPayment Int Int Float
+    | ApplyAllSuggestedPayments (Dict Int (List ( Int, Float )))
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
 
@@ -313,21 +314,15 @@ viewAdd participantModel model =
                     []
                )
         )
-        [ Html.div [ Html.Attributes.class "col-sm-3" ] []
+        [ div [ Html.Attributes.class "col-sm-3" ] []
         , div [ Html.Attributes.class "col-sm-9" ] <|
             case suggestedAmount of
                 Nothing ->
                     []
 
                 Just amount ->
-                    [ Html.a
-                        -- Need to set href "#" to render the link correctly,
-                        -- but then "prevent default" also needs to be enabled to actually prevent a URL change.
-                        -- I'm amazed that JSON decoding must be involved to do this, but it seems to be the case...
-                        [ Html.Attributes.href "#"
-                        , Html.Events.preventDefaultOn "click" <|
-                            Decode.succeed ( CreateApplySuggestedAmount amount, True )
-                        ]
+                    [ Layout.internalLink
+                        (CreateApplySuggestedAmount amount)
                         [ text <| "Suggested amount: " ++ (amount |> String.fromAmount) ]
                     ]
         ]
@@ -466,7 +461,7 @@ update balances msg model =
                     ( ( model, False ), Cmd.none )
 
                 Ok payment ->
-                    ( ( model |> addPayment payment (id + 1), True )
+                    ( ( model |> addPayments [ payment ] (id + 1), True )
                     , Update.delegate CloseModal
                     )
 
@@ -497,17 +492,42 @@ update balances msg model =
 
         ApplySuggestedPayment payerId receiverId amount ->
             ( ( model
-                    |> addPayment
-                        { id = model.nextId
-                        , payer = payerId
-                        , receiver = receiverId
-                        , amount = amount
-                        }
+                    |> addPayments
+                        [ { id = model.nextId
+                          , payer = payerId
+                          , receiver = receiverId
+                          , amount = amount
+                          }
+                        ]
                         (model.nextId + 1)
               , True
               )
             , Cmd.none
             )
+
+        ApplyAllSuggestedPayments suggestedPayments ->
+            let
+                ( paymentsReversed, nextId ) =
+                    suggestedPayments
+                        |> Dict.foldl
+                            (\payerId payerSuggestedPayments ( payerPaymentsReversed, payerNextId ) ->
+                                payerSuggestedPayments
+                                    |> List.foldl
+                                        (\( receiverId, amount ) ( receiverPayments, receiverNextId ) ->
+                                            ( { id = receiverNextId
+                                              , payer = payerId
+                                              , receiver = receiverId
+                                              , amount = amount
+                                              }
+                                                :: receiverPayments
+                                            , receiverNextId + 1
+                                            )
+                                        )
+                                        ( payerPaymentsReversed, payerNextId )
+                            )
+                            ( [], model.nextId + 1 )
+            in
+            ( ( model |> addPayments (paymentsReversed |> List.reverse) nextId, True ), Cmd.none )
 
         LayoutMsg layoutMsg ->
             case layoutMsg of
@@ -532,19 +552,18 @@ update balances msg model =
             ( ( model, False ), Cmd.none )
 
 
-addPayment : Payment -> Int -> Model -> Model
-addPayment payment nextId model =
-    let
-        payments =
-            model.payments ++ [ payment ]
-
-        paymentBalance =
-            model.paymentBalance
-                |> updatePaymentBalances payment.payer payment.receiver payment.amount
-    in
+addPayments : List Payment -> Int -> Model -> Model
+addPayments payments nextId model =
     { model
-        | payments = payments
-        , paymentBalance = paymentBalance
+        | payments = model.payments ++ payments
+        , paymentBalance =
+            payments
+                |> List.foldl
+                    (\payment paymentBalance ->
+                        paymentBalance
+                            |> updatePaymentBalances payment.payer payment.receiver payment.amount
+                    )
+                    model.paymentBalance
         , nextId = nextId
     }
 

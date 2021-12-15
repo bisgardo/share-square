@@ -4,13 +4,13 @@ import Dict exposing (Dict)
 import Expense exposing (Expense)
 import Html exposing (Html, div, text)
 import Html.Attributes
-import Html.Events
 import Html.Keyed
-import Json.Decode
+import Layout
 import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
 import Payment
 import Util.Dict as Dict
+import Util.Maybe as Maybe
 import Util.String as String
 
 
@@ -72,9 +72,18 @@ viewBalances participants model =
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Balance" ]
+                , Html.th [ Html.Attributes.scope "col" ]
+                    [ Html.text "Suggested payments ("
+                    , case model.computed |> Maybe.map .suggestedPayments |> Maybe.nothingIf Dict.isEmpty of
+                        Nothing ->
+                            Html.i [] [ Html.text "None" ]
 
-                -- TODO Add "apply all" link.
-                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Suggested payments" ]
+                        Just suggestedPayments ->
+                            Layout.internalLink
+                                (Payment.ApplyAllSuggestedPayments suggestedPayments |> PaymentMsg)
+                                [ Html.text "apply all" ]
+                    , Html.text ")"
+                    ]
                 ]
             ]
         , Html.Keyed.node "tbody"
@@ -137,18 +146,13 @@ viewBalances participants model =
                                                         >> List.map
                                                             (\( receiverName, receiverId, suggestedAmount ) ->
                                                                 div []
-                                                                    [ Html.a
-                                                                        [ Html.Attributes.href "#"
-                                                                        , Html.Events.preventDefaultOn "click" <|
-                                                                            Json.Decode.succeed
-                                                                                ( Payment.ApplySuggestedPayment
-                                                                                    participantId
-                                                                                    receiverId
-                                                                                    suggestedAmount
-                                                                                    |> PaymentMsg
-                                                                                , True
-                                                                                )
-                                                                        ]
+                                                                    [ Layout.internalLink
+                                                                        (Payment.ApplySuggestedPayment
+                                                                            participantId
+                                                                            receiverId
+                                                                            suggestedAmount
+                                                                            |> PaymentMsg
+                                                                        )
                                                                         [ Html.text <|
                                                                             "Pay "
                                                                                 ++ String.fromAmount suggestedAmount

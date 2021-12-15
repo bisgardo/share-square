@@ -3,6 +3,7 @@ port module Layout exposing (..)
 import Html exposing (Html, button, div, h5, text)
 import Html.Attributes exposing (class, disabled, tabindex, type_)
 import Html.Events exposing (onCheck, onInput)
+import Json.Decode
 import Set exposing (Set)
 
 
@@ -249,6 +250,18 @@ checkboxesInput label fields checkedKeys tagger =
                 )
                 fields
         ]
+
+
+internalLink : msg -> List (Html msg) -> Html msg
+internalLink clickMsg children =
+    -- We have to set href "#" for the link to render correctly,
+    -- but then "prevent default" also needs to be enabled to actually prevent a URL change.
+    -- The fact that JSON decoding has to be involved to achieve this is one of life's small mysteries...
+    Html.a
+        [ Html.Attributes.href "#"
+        , Json.Decode.succeed ( clickMsg, True ) |> Html.Events.preventDefaultOn "click"
+        ]
+        children
 
 
 port closeModal : String -> Cmd msg
