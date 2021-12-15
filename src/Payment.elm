@@ -35,7 +35,7 @@ type alias Model =
 
 
 type alias Payment =
-    { id : String
+    { id : Int
     , payer : Int
     , receiver : Int
     , amount : Float
@@ -53,7 +53,7 @@ decoder =
             }
         )
         -- ID
-        (Decode.field "i" Decode.string)
+        (Decode.field "i" Decode.int)
         -- payer ID
         (Decode.field "p" Decode.int)
         -- amount
@@ -64,7 +64,7 @@ decoder =
 
 encode : Payment -> Value
 encode payment =
-    [ ( "i", payment.id |> Encode.string )
+    [ ( "i", payment.id |> Encode.int )
     , ( "p", payment.payer |> Encode.int )
     , ( "a", payment.amount |> Encode.float )
     , ( "r", payment.receiver |> Encode.int )
@@ -85,7 +85,7 @@ import_ payments model =
             1
                 + (payments
                     |> List.foldl
-                        (\payment -> max (payment.id |> String.toInt |> Maybe.withDefault 0))
+                        (\payment -> max payment.id)
                         (model.nextId - 1)
                   )
     }
@@ -121,7 +121,7 @@ create id model =
     in
     Result.map3
         (\payerId receiverId amount ->
-            { id = id |> String.fromInt
+            { id = id
             , payer = payerId
             , receiver = receiverId
             , amount = amount
@@ -172,7 +172,7 @@ type Msg
     | CreateEditAmount String
     | CreateApplySuggestedAmount Float
     | CreateSubmit
-    | Delete String
+    | Delete Int
     | ApplySuggestedPayment Int Int Float
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
@@ -195,9 +195,13 @@ view participantModel model =
             (model.payments
                 |> List.map
                     (\payment ->
-                        ( payment.id
+                        let
+                            id =
+                                payment.id |> String.fromInt
+                        in
+                        ( id
                         , Html.tr []
-                            [ Html.td [] [ Html.text payment.id ]
+                            [ Html.td [] [ Html.text id ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
                             , Html.td [] [ Html.text (payment.amount |> String.fromAmount) ]
@@ -472,7 +476,7 @@ update balances msg model =
                     -- Should never happen.
                     let
                         _ =
-                            Debug.log "error" <| "Cannot delete payment with non-existent ID '" ++ paymentId ++ "'."
+                            Debug.log "error" <| "Cannot delete payment with non-existent ID '" ++ (paymentId |> String.fromInt) ++ "'."
                     in
                     ( ( model, False ), Cmd.none )
 
@@ -494,7 +498,7 @@ update balances msg model =
         ApplySuggestedPayment payerId receiverId amount ->
             ( ( model
                     |> addPayment
-                        { id = model.nextId |> String.fromInt
+                        { id = model.nextId
                         , payer = payerId
                         , receiver = receiverId
                         , amount = amount
