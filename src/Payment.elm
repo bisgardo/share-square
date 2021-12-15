@@ -586,6 +586,7 @@ autosuggestPayments totalBalances =
                         >> Just
                     )
 
+trivialityThresholdAmount = 0.01
 
 autosuggestPayment : Dict Int Float -> Maybe ( Int, Int, Float )
 autosuggestPayment =
@@ -596,8 +597,7 @@ autosuggestPayment =
                     debt =
                         min maxBalance -minBalance
                 in
-                -- TODO Should really do if |debt| < epsilon?
-                if debt == 0 then
+                if abs debt < trivialityThresholdAmount then
                     Nothing
 
                 else
