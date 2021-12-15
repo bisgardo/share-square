@@ -30,7 +30,7 @@ type alias Model =
     { create : Maybe CreateModel
     , payments : List Payment
     , paymentBalance : Dict Int Float
-    , nextPaymentId : Int -- TODO rename to 'nextId'
+    , nextId : Int
     }
 
 
@@ -81,12 +81,12 @@ import_ payments model =
                 |> List.foldl
                     (\payment -> updatePaymentBalances payment.payer payment.receiver payment.amount)
                     model.paymentBalance
-        , nextPaymentId =
+        , nextId =
             1
                 + (payments
                     |> List.foldl
                         (\payment -> max (payment.id |> String.toInt |> Maybe.withDefault 0))
-                        (model.nextPaymentId - 1)
+                        (model.nextId - 1)
                   )
     }
 
@@ -137,7 +137,7 @@ init =
     ( { create = Nothing
       , payments = []
       , paymentBalance = Dict.empty
-      , nextPaymentId = 1
+      , nextId = 1
       }
     , Cmd.none
     )
@@ -445,7 +445,7 @@ update balances msg model =
         CreateSubmit ->
             let
                 id =
-                    model.nextPaymentId
+                    model.nextId
 
                 result =
                     model.create
@@ -494,12 +494,12 @@ update balances msg model =
         ApplySuggestedPayment payerId receiverId amount ->
             ( ( model
                     |> addPayment
-                        { id = model.nextPaymentId |> String.fromInt
+                        { id = model.nextId |> String.fromInt
                         , payer = payerId
                         , receiver = receiverId
                         , amount = amount
                         }
-                        (model.nextPaymentId + 1)
+                        (model.nextId + 1)
               , True
               )
             , Cmd.none
@@ -541,7 +541,7 @@ addPayment payment nextId model =
     { model
         | payments = payments
         , paymentBalance = paymentBalance
-        , nextPaymentId = nextId
+        , nextId = nextId
     }
 
 

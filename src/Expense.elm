@@ -48,7 +48,7 @@ type alias Model =
     { create : Maybe CreateModel
     , expenses : List Expense
     , participant : Participant.Model
-    , nextExpenseId : Int -- TODO rename to 'nextId'
+    , nextId : Int
     }
 
 
@@ -122,12 +122,12 @@ import_ participants expenses model =
             model.participant
                 |> Participant.import_ participants
         , expenses = expenses
-        , nextExpenseId =
+        , nextId =
             1
                 + (expenses
                     |> List.foldl
                         (\expense -> max (expense.id |> String.toInt |> Maybe.withDefault 0))
-                        (model.nextExpenseId - 1)
+                        (model.nextId - 1)
                   )
     }
 
@@ -187,7 +187,7 @@ init =
     ( { create = Nothing
       , expenses = []
       , participant = participantModel
-      , nextExpenseId = 1
+      , nextId = 1
       }
     , Cmd.batch
         [ participantCmd |> Cmd.map ParticipantMsg
@@ -401,7 +401,7 @@ update msg model =
         CreateSubmit ->
             let
                 id =
-                    model.nextExpenseId
+                    model.nextId
 
                 expense =
                     model.create
@@ -420,7 +420,7 @@ update msg model =
                 Ok value ->
                     ( ( { model
                             | expenses = model.expenses ++ [ value ]
-                            , nextExpenseId = id + 1
+                            , nextId = id + 1
                         }
                       , True
                       )
