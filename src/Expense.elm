@@ -38,7 +38,7 @@ type Msg
     | CreateEditDescription String
     | CreateEditReceiver String Bool
     | CreateSubmit
-    | Delete String
+    | Delete Int
     | LayoutMsg Layout.Msg
     | ParticipantMsg Participant.Msg
     | DomMsg (Result Dom.Error ())
@@ -64,7 +64,7 @@ type alias CreateModel =
 
 
 type alias Expense =
-    { id : String
+    { id : Int
     , payer : Int
     , amount : Float
     , description : String
@@ -77,7 +77,7 @@ decoder =
     Decode.map5
         Expense
         -- ID
-        (Decode.field "i" Decode.string)
+        (Decode.field "i" Decode.int)
         -- payer ID
         (Decode.field "p" Decode.int)
         -- amount
@@ -95,7 +95,7 @@ decoder =
 
 encode : Expense -> Value
 encode expense =
-    [ Just ( "i", expense.id |> Encode.string )
+    [ Just ( "i", expense.id |> Encode.int )
     , Just ( "p", expense.payer |> Encode.int )
     , Just ( "a", expense.amount |> Encode.float )
     , if expense.description |> String.isEmpty then
@@ -126,7 +126,7 @@ import_ participants expenses model =
             1
                 + (expenses
                     |> List.foldl
-                        (\expense -> max (expense.id |> String.toInt |> Maybe.withDefault 0))
+                        (\expense -> max expense.id)
                         (model.nextId - 1)
                   )
     }
@@ -166,7 +166,7 @@ create id model =
     in
     Result.map3
         (\payerId amount receivers ->
-            { id = id |> String.fromInt
+            { id = id
             , payer = payerId
             , amount = amount
             , description = model.description.value |> String.trim
@@ -264,9 +264,13 @@ view model =
             (model.expenses
                 |> List.map
                     (\expense ->
-                        ( expense.id
+                        let
+                            id =
+                                expense.id |> String.fromInt
+                        in
+                        ( id
                         , Html.tr []
-                            ([ Html.td [] [ Html.text expense.id ]
+                            ([ Html.td [] [ Html.text id ]
                              , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
                              , Html.td [] [ Html.text (expense.amount |> String.fromAmount) ]
                              , Html.td [] [ Html.text expense.description ]
