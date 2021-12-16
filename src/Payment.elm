@@ -525,7 +525,7 @@ update balances msg model =
                                         )
                                         ( payerPaymentsReversed, payerNextId )
                             )
-                            ( [], model.nextId + 1 )
+                            ( [], model.nextId )
             in
             ( ( model |> addPayments (paymentsReversed |> List.reverse) nextId, True ), Cmd.none )
 
