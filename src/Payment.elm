@@ -147,7 +147,6 @@ initCreate : String -> CreateModel
 initCreate initId =
     { payerId = initId
     , receiverId = initId
-    , receiverIdFeedback = None
     , amount =
         { key = "payment-create-amount"
         , value = ""
@@ -160,7 +159,6 @@ initCreate initId =
 type alias CreateModel =
     { payerId : String
     , receiverId : String
-    , receiverIdFeedback : Feedback
     , amount : Validated Field
     , suggestedAmount : Result ( Maybe Int, Maybe Int ) Float
     }
@@ -251,8 +249,8 @@ viewCreateModal participantModel model =
                 Just createModel ->
                     ( viewAdd participantModel createModel
                     , String.isEmpty createModel.amount.value
-                        || createModel.receiverIdFeedback
-                        /= None
+                        || createModel.payerId
+                        == createModel.receiverId
                         || List.any isInvalid [ createModel.amount ]
                     )
     in
@@ -269,8 +267,8 @@ viewAdd participantModel model =
                 |> List.map Participant.toField
 
         ( payerFeedback, receiverFeedback, suggestedAmount ) =
-            if model.receiverIdFeedback /= None then
-                ( None, model.receiverIdFeedback, Nothing )
+            if model.payerId == model.receiverId then
+                ( None, Error "Self-payment is not allowed.", Nothing )
 
             else
                 case model.suggestedAmount of
@@ -435,12 +433,6 @@ update balances msg model =
                                 (\createModel ->
                                     { createModel
                                         | payerId = payerId
-                                        , receiverIdFeedback =
-                                            if payerId == createModel.receiverId then
-                                                Error "Self-payment is not allowed."
-
-                                            else
-                                                None
                                         , suggestedAmount =
                                             balances
                                                 |> Maybe.unwrap (Err ( Nothing, Nothing ))
@@ -465,12 +457,6 @@ update balances msg model =
                                 (\createModel ->
                                     { createModel
                                         | receiverId = receiverId
-                                        , receiverIdFeedback =
-                                            if createModel.payerId == receiverId then
-                                                Error "Self-payment is not allowed."
-
-                                            else
-                                                None
                                         , suggestedAmount =
                                             balances
                                                 |> Maybe.unwrap (Err ( Nothing, Nothing ))
