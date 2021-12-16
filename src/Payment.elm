@@ -404,8 +404,7 @@ update balances msg model =
               )
             , Cmd.none
             )
-                -- TODO Extract proper abstraction...
-                |> Update.chains (\chainedMsg ( resultModel, resultModelChanged ) -> update balances chainedMsg resultModel |> Tuple.mapFirst (Tuple.mapSecond ((||) resultModelChanged)))
+                |> Update.chains (Update.withPairModel (update balances) (||))
                     ((case firstNegativeBalanceParticipant |> Maybe.orElse firstParticipantFallback of
                         Nothing ->
                             []
