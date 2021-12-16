@@ -185,7 +185,7 @@ init flags url key =
         , computationCmd |> Cmd.map ComputationMsg
         ]
     )
-        |> Update.chain (SetMode storageMode FromStorage) update
+        |> Update.chain update (SetMode storageMode FromStorage)
 
 
 subscriptions : Model -> Sub Msg
@@ -489,7 +489,7 @@ update msg model =
                             |> Browser.Navigation.replaceUrl model.key
                         ]
                     )
-                        |> Update.chain (SyncStorage syncDirection) update
+                        |> Update.chain update (SyncStorage syncDirection)
 
         StorageValuesLoaded result ->
             case result of

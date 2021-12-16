@@ -147,6 +147,7 @@ initCreate : String -> CreateModel
 initCreate initId =
     { payerId = initId
     , receiverId = initId
+    , receiverIdFeedback = None
     , amount =
         { key = "payment-create-amount"
         , value = ""
@@ -159,6 +160,7 @@ initCreate initId =
 type alias CreateModel =
     { payerId : String
     , receiverId : String
+    , receiverIdFeedback : Feedback
     , amount : Validated Field
     , suggestedAmount : Result ( Maybe Int, Maybe Int ) Float
     }
@@ -249,6 +251,8 @@ viewCreateModal participantModel model =
                 Just createModel ->
                     ( viewAdd participantModel createModel
                     , String.isEmpty createModel.amount.value
+                        || createModel.receiverIdFeedback
+                        /= None
                         || List.any isInvalid [ createModel.amount ]
                     )
     in
@@ -265,35 +269,39 @@ viewAdd participantModel model =
                 |> List.map Participant.toField
 
         ( payerFeedback, receiverFeedback, suggestedAmount ) =
-            case model.suggestedAmount of
-                Err ( payerIdNotOwing, receiverIdNotOwed ) ->
-                    ( payerIdNotOwing
-                        |> Maybe.unwrap None
-                            (\payerId ->
-                                Info <|
-                                    (participantModel.idToName |> Participant.lookupName payerId)
-                                        ++ " doesn't owe anything."
-                            )
-                    , receiverIdNotOwed
-                        |> Maybe.unwrap None
-                            (\receiverId ->
-                                Info <|
-                                    (participantModel.idToName |> Participant.lookupName receiverId)
-                                        ++ " isn't owed anything."
-                            )
-                    , Nothing
-                    )
+            if model.receiverIdFeedback /= None then
+                ( None, model.receiverIdFeedback, Nothing )
 
-                Ok amount ->
-                    ( None
-                    , None
-                    , if amount == (model.amount.value |> String.toFloat |> Maybe.withDefault 0) then
-                        -- Amount is already the suggested value.
-                        Nothing
+            else
+                case model.suggestedAmount of
+                    Err ( payerIdNotOwing, receiverIdNotOwed ) ->
+                        ( payerIdNotOwing
+                            |> Maybe.unwrap None
+                                (\payerId ->
+                                    Info <|
+                                        (participantModel.idToName |> Participant.lookupName payerId)
+                                            ++ " doesn't owe anything."
+                                )
+                        , receiverIdNotOwed
+                            |> Maybe.unwrap None
+                                (\receiverId ->
+                                    Info <|
+                                        (participantModel.idToName |> Participant.lookupName receiverId)
+                                            ++ " isn't owed anything."
+                                )
+                        , Nothing
+                        )
 
-                      else
-                        Just amount
-                    )
+                    Ok amount ->
+                        ( None
+                        , None
+                        , if amount == (model.amount.value |> String.toFloat |> Maybe.withDefault 0) then
+                            -- Amount is already the suggested value.
+                            Nothing
+
+                          else
+                            Just amount
+                        )
     in
     [ optionsInput "new-payments-payer"
         "Payer"
@@ -339,6 +347,52 @@ update : Maybe (Dict Int Float) -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update balances msg model =
     case msg of
         LoadCreate participants ->
+            let
+                (( firstParticipantFallback, secondParticipantFallback ) as fallbackResult) =
+                    case participants of
+                        firstParticipant :: secondParticipant :: _ ->
+                            ( Just firstParticipant, Just secondParticipant )
+
+                        _ ->
+                            ( Nothing, Nothing )
+
+                ( firstNegativeBalanceParticipant, firstPositiveBalanceParticipant ) =
+                    case balances of
+                        Nothing ->
+                            fallbackResult
+
+                        Just participantBalances ->
+                            participantBalances
+                                |> Dict.foldl
+                                    (\participantId participantBalance ( negativeResult, positiveResult ) ->
+                                        let
+                                            totalBalance =
+                                                participantBalance + lookupBalance participantId model.paymentBalance
+                                        in
+                                        ( case negativeResult of
+                                            Nothing ->
+                                                if totalBalance < 0 then
+                                                    Just participantId
+
+                                                else
+                                                    Nothing
+
+                                            Just _ ->
+                                                negativeResult
+                                        , case positiveResult of
+                                            Nothing ->
+                                                if totalBalance > 0 then
+                                                    Just participantId
+
+                                                else
+                                                    Nothing
+
+                                            Just _ ->
+                                                positiveResult
+                                        )
+                                    )
+                                    ( Nothing, Nothing )
+            in
             ( ( { model
                     | create =
                         participants
@@ -352,6 +406,23 @@ update balances msg model =
               )
             , Cmd.none
             )
+                -- TODO Extract proper abstraction...
+                |> Update.chains (\chainedMsg ( resultModel, resultModelChanged ) -> update balances chainedMsg resultModel |> Tuple.mapFirst (Tuple.mapSecond ((||) resultModelChanged)))
+                    ((case firstNegativeBalanceParticipant |> Maybe.orElse firstParticipantFallback of
+                        Nothing ->
+                            []
+
+                        Just payer ->
+                            [ CreateEditPayer (payer |> String.fromInt) ]
+                     )
+                        ++ (case firstPositiveBalanceParticipant |> Maybe.orElse secondParticipantFallback of
+                                Nothing ->
+                                    []
+
+                                Just receiver ->
+                                    [ CreateEditReceiver (receiver |> String.fromInt) ]
+                           )
+                    )
 
         CloseModal ->
             ( ( model, False ), closeModal createModalId )
@@ -364,6 +435,12 @@ update balances msg model =
                                 (\createModel ->
                                     { createModel
                                         | payerId = payerId
+                                        , receiverIdFeedback =
+                                            if payerId == createModel.receiverId then
+                                                Error "Self-payment is not allowed."
+
+                                            else
+                                                None
                                         , suggestedAmount =
                                             balances
                                                 |> Maybe.unwrap (Err ( Nothing, Nothing ))
@@ -388,6 +465,12 @@ update balances msg model =
                                 (\createModel ->
                                     { createModel
                                         | receiverId = receiverId
+                                        , receiverIdFeedback =
+                                            if createModel.payerId == receiverId then
+                                                Error "Self-payment is not allowed."
+
+                                            else
+                                                None
                                         , suggestedAmount =
                                             balances
                                                 |> Maybe.unwrap (Err ( Nothing, Nothing ))
@@ -438,8 +521,8 @@ update balances msg model =
                     createModel.amount.key |> Dom.focus |> Task.attempt DomMsg
             )
                 |> Update.chain
-                    (amount |> String.fromAmount |> CreateEditAmount)
                     (update balances)
+                    (amount |> String.fromAmount |> CreateEditAmount)
 
         CreateSubmit ->
             let
@@ -626,8 +709,12 @@ autosuggestPayment =
 
 sumBalances : Int -> Dict Int Float -> Dict Int Float -> Float
 sumBalances participantId paymentBalance balance =
-    (balance |> Dict.get participantId |> Maybe.withDefault 0)
-        + (paymentBalance |> Dict.get participantId |> Maybe.withDefault 0)
+    (balance |> lookupBalance participantId) + (paymentBalance |> lookupBalance participantId)
+
+
+lookupBalance : Int -> Dict Int Float -> Float
+lookupBalance participantId =
+    Dict.get participantId >> Maybe.withDefault 0
 
 
 suggestPaymentAmount : String -> String -> Dict Int Float -> Dict Int Float -> Result ( Maybe Int, Maybe Int ) Float
