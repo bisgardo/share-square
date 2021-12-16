@@ -94,42 +94,31 @@ import_ payments model =
 create : Int -> CreateModel -> Result String Payment
 create id model =
     -- Should probably run values though their validators...
-    let
-        payerResult =
-            case model.payerId |> String.toInt of
-                Nothing ->
-                    Err <| "unexpected non-integer key '" ++ model.payerId ++ "' of payer"
+    case model.payerId |> String.toInt of
+        Nothing ->
+            Err <| "unexpected non-integer key '" ++ model.payerId ++ "' of payer"
 
-                Just payerId ->
-                    Ok payerId
-
-        receiverResult =
+        Just payerId ->
             case model.receiverId |> String.toInt of
                 Nothing ->
                     Err <| "unexpected non-integer key '" ++ model.receiverId ++ "' of receiver"
 
-                Just payerId ->
-                    Ok payerId
+                Just receiverId ->
+                    if payerId == receiverId then
+                        Err "payer ID must be different from receiver ID"
 
-        amountResult =
-            case model.amount.value |> String.toFloat of
-                Nothing ->
-                    Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
+                    else
+                        case model.amount.value |> String.toFloat of
+                            Nothing ->
+                                Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
-                Just amount ->
-                    Ok amount
-    in
-    Result.map3
-        (\payerId receiverId amount ->
-            { id = id
-            , payer = payerId
-            , receiver = receiverId
-            , amount = amount
-            }
-        )
-        payerResult
-        receiverResult
-        amountResult
+                            Just amount ->
+                                Ok
+                                    { id = id
+                                    , payer = payerId
+                                    , receiver = receiverId
+                                    , amount = amount
+                                    }
 
 
 init : ( Model, Cmd Msg )
@@ -268,7 +257,7 @@ viewAdd participantModel model =
 
         ( payerFeedback, receiverFeedback, suggestedAmount ) =
             if model.payerId == model.receiverId then
-                ( None, Error "Self-payment is not allowed.", Nothing )
+                ( None, Error "Receiver must be different from payer.", Nothing )
 
             else
                 case model.suggestedAmount of

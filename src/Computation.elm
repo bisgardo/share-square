@@ -76,7 +76,7 @@ viewBalances participants model =
                     [ Html.text "Suggested payments ("
                     , case model.computed |> Maybe.map .suggestedPayments |> Maybe.nothingIf Dict.isEmpty of
                         Nothing ->
-                            Html.i [] [ Html.text "None" ]
+                            Html.i [] [ Html.text "none" ]
 
                         Just suggestedPayments ->
                             Layout.internalLink
