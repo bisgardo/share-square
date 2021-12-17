@@ -4,6 +4,7 @@ import Dict exposing (Dict)
 import Expense exposing (Expense)
 import Html exposing (Html, div, text)
 import Html.Attributes
+import Html.Events
 import Html.Keyed
 import Layout
 import Maybe.Extra as Maybe
@@ -72,18 +73,20 @@ viewBalances participants model =
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Balance" ]
-                , Html.th [ Html.Attributes.scope "col" ]
-                    [ Html.text "Suggested payments ("
-                    , case model.computed |> Maybe.map .suggestedPayments |> Maybe.nothingIf Dict.isEmpty of
-                        Nothing ->
-                            Html.i [] [ Html.text "none" ]
+                , Html.th [ Html.Attributes.scope "col" ] <|
+                    [ Html.text "Suggested payments" ]
+                        ++ (case model.computed |> Maybe.map .suggestedPayments |> Maybe.nothingIf Dict.isEmpty of
+                                Nothing ->
+                                    []
 
-                        Just suggestedPayments ->
-                            Layout.internalLink
-                                (Payment.ApplyAllSuggestedPayments suggestedPayments |> PaymentMsg)
-                                [ Html.text "apply all" ]
-                    , Html.text ")"
-                    ]
+                                Just suggestedPayments ->
+                                    [ Html.button
+                                        [Html.Attributes.class "ms-1 badge btn btn-primary"
+                                        , Html.Events.onClick (Payment.ApplyAllSuggestedPayments suggestedPayments |> PaymentMsg)
+                                        ]
+                                        [ Html.text "apply all" ]
+                                    ]
+                           )
                 ]
             ]
         , Html.Keyed.node "tbody"
@@ -285,7 +288,7 @@ update msg model =
                                     Payment.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
                                 }
                     }
-                  , True
+                  , False
                   )
                 , Cmd.none
                 )

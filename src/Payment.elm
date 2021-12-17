@@ -318,7 +318,7 @@ viewAdd participantModel model =
                 Just amount ->
                     [ Layout.internalLink
                         (CreateApplySuggestedAmount amount)
-                        [ text <| "Suggested amount: " ++ (amount |> String.fromAmount) ]
+                        [ text <| "Balance difference: " ++ (amount |> String.fromAmount) ]
                     ]
         ]
     , textInput "Amount" model.amount CreateEditAmount
