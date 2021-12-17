@@ -368,6 +368,18 @@ viewAdd participantModel model =
     , textInput "Description" model.description CreateEditDescription
     , checkboxesInput "Receivers" participantsFields (model.receivers |> Dict.keys |> Set.fromList) CreateEditReceiver
     ]
+        ++ (if Dict.keys model.receivers == [ model.payerId ] then
+                [ Html.div
+                    [ Html.Attributes.class "alert alert-warning"
+                    , Html.Attributes.attribute "role" "alert"
+                    ]
+                    [ Html.text "The only receiver of the expense is the payer themself. The expense will not effect any balances."
+                    ]
+                ]
+
+            else
+                []
+           )
 
 
 subscriptions : Model -> Sub Msg
