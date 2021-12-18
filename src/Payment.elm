@@ -14,6 +14,7 @@ import Maybe.Extra as Maybe
 import Participant
 import Task
 import Util.List as List
+import Util.Number as Number
 import Util.String as String
 import Util.Update as Update
 
@@ -355,27 +356,21 @@ update balances msg model =
                                         let
                                             totalBalance =
                                                 participantBalance + lookupBalance participantId model.paymentBalance
+
+                                            updateResult isValid result =
+                                                case result of
+                                                    Nothing ->
+                                                        if isValid totalBalance then
+                                                            Just participantId
+
+                                                        else
+                                                            Nothing
+
+                                                    Just _ ->
+                                                        result
                                         in
-                                        ( case negativeResult of
-                                            Nothing ->
-                                                if totalBalance < 0 then
-                                                    Just participantId
-
-                                                else
-                                                    Nothing
-
-                                            Just _ ->
-                                                negativeResult
-                                        , case positiveResult of
-                                            Nothing ->
-                                                if totalBalance > 0 then
-                                                    Just participantId
-
-                                                else
-                                                    Nothing
-
-                                            Just _ ->
-                                                positiveResult
+                                        ( updateResult Number.isNegative negativeResult
+                                        , updateResult Number.isPositive positiveResult
                                         )
                                     )
                                     ( Nothing, Nothing )

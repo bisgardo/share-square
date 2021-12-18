@@ -373,7 +373,7 @@ viewAdd participantModel model =
                     [ Html.Attributes.class "alert alert-warning"
                     , Html.Attributes.attribute "role" "alert"
                     ]
-                    [ Html.text "The only receiver of the expense is the payer themself. The expense will not effect any balances."
+                    [ Html.text "Expenses where the payer is also the only receiver do not affect any balances."
                     ]
                 ]
 
