@@ -626,7 +626,7 @@ update balances msg model =
                             | payments = newPayments
                             , paymentBalance = paymentBalance
 
-                            -- Technically needed even though it's currently redundant as deletion isn't exposed to done payments.
+                            -- Technically required even if currently redundant as deletion isn't exposed to done payments.
                             , donePayments = model.donePayments |> Set.remove paymentId
                         }
                       , True
