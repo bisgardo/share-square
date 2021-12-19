@@ -12,7 +12,9 @@ import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import Maybe.Extra as Maybe
 import Participant
+import Set exposing (Set)
 import Task
+import Util.JsonDecode as Decode
 import Util.List as List
 import Util.Number as Number
 import Util.String as String
@@ -32,6 +34,7 @@ type alias Model =
     , payments : List Payment
     , paymentBalance : Dict Int Float
     , nextId : Int
+    , donePayments : Set Int
     }
 
 
@@ -43,8 +46,30 @@ type alias Payment =
     }
 
 
-decoder : Decoder Payment
+type alias StorageValues =
+    { payments : List Payment
+    , done : Set Int
+    }
+
+
+decoder : Decoder StorageValues
 decoder =
+    Decode.map2
+        StorageValues
+        (Decode.field "p" <| Decode.nullableList paymentDecoder)
+        (Decode.field "d" (Decode.list Decode.int |> Decode.map Set.fromList))
+
+
+encode : StorageValues -> Value
+encode values =
+    [ ( "p", values.payments |> Encode.list encodePayment )
+    , ( "d", values.done |> Set.toList |> List.sort |> Encode.list Encode.int )
+    ]
+        |> Encode.object
+
+
+paymentDecoder : Decoder Payment
+paymentDecoder =
     Decode.map4
         (\id payerId amount receiverId ->
             { id = id
@@ -63,8 +88,8 @@ decoder =
         (Decode.field "r" Decode.int)
 
 
-encode : Payment -> Value
-encode payment =
+encodePayment : Payment -> Value
+encodePayment payment =
     [ ( "i", payment.id |> Encode.int )
     , ( "p", payment.payer |> Encode.int )
     , ( "a", payment.amount |> Encode.float )
@@ -73,26 +98,34 @@ encode payment =
         |> Encode.object
 
 
-import_ : List Payment -> Model -> Model
-import_ payments model =
+import_ : StorageValues -> Model -> Model
+import_ values model =
     { model
-        | payments = payments
+        | payments = values.payments
         , paymentBalance =
-            payments
+            values.payments
                 |> List.foldl
                     (\payment -> updatePaymentBalances payment.payer payment.receiver payment.amount)
                     model.paymentBalance
         , nextId =
             1
-                + (payments
+                + (values.payments
                     |> List.foldl
                         (\payment -> max payment.id)
                         (model.nextId - 1)
                   )
+        , donePayments = values.done
     }
 
 
-create : Int -> CreateModel -> Result String Payment
+export : Model -> StorageValues
+export model =
+    { payments = model.payments
+    , done = model.donePayments
+    }
+
+
+create : Int -> CreateModel -> Result String ( Payment, Bool )
 create id model =
     -- Should probably run values though their validators...
     case model.payerId |> String.toInt of
@@ -115,11 +148,13 @@ create id model =
 
                             Just amount ->
                                 Ok
-                                    { id = id
-                                    , payer = payerId
-                                    , receiver = receiverId
-                                    , amount = amount
-                                    }
+                                    ( { id = id
+                                      , payer = payerId
+                                      , receiver = receiverId
+                                      , amount = amount
+                                      }
+                                    , model.done
+                                    )
 
 
 init : ( Model, Cmd Msg )
@@ -128,6 +163,7 @@ init =
       , payments = []
       , paymentBalance = Dict.empty
       , nextId = 1
+      , donePayments = Set.empty
       }
     , Cmd.none
     )
@@ -143,6 +179,7 @@ initCreate initId =
         , feedback = None
         }
     , suggestedAmount = Err ( Nothing, Nothing )
+    , done = True
     }
 
 
@@ -151,6 +188,7 @@ type alias CreateModel =
     , receiverId : String
     , amount : Validated Field
     , suggestedAmount : Result ( Maybe Int, Maybe Int ) Float
+    , done : Bool
     }
 
 
@@ -160,11 +198,13 @@ type Msg
     | CreateEditPayer String
     | CreateEditReceiver String
     | CreateEditAmount String
+    | CreateSetDone Bool
     | CreateApplySuggestedAmount Float
     | CreateSubmit
     | Delete Int
     | ApplySuggestedPayment Int Int Float
     | ApplyAllSuggestedPayments (Dict Int (List ( Int, Float )))
+    | SetDone Int Bool
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
 
@@ -178,6 +218,7 @@ view participantModel model =
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Done" ]
                 , Html.th [] []
                 ]
             ]
@@ -196,16 +237,31 @@ view participantModel model =
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
                             , Html.td [] [ Html.text (payment.amount |> String.fromAmount) ]
-                            , Html.td
-                                [ Html.Attributes.align "right", Html.Events.onClick (Delete payment.id) ]
-                                [ Html.a
-                                    [ data "bs-toggle" "tooltip"
-                                    , data "bs-placement" "left"
-                                    , Html.Attributes.title "Delete"
-                                    , Html.Attributes.attribute "role" "button"
+                            , Html.td []
+                                [ Html.input
+                                    [ Html.Attributes.type_ "checkbox"
+                                    , Html.Attributes.class "form-check-input"
+                                    , Html.Attributes.checked (model.donePayments |> Set.member payment.id)
+                                    , Html.Events.onCheck (SetDone payment.id)
                                     ]
-                                    [ Html.i [ Html.Attributes.class "bi bi-trash" ] [] ]
+                                    []
                                 ]
+                            , Html.td
+                                [ Html.Attributes.align "right" ]
+                                (if model.donePayments |> Set.member payment.id then
+                                    []
+
+                                 else
+                                    [ Html.a
+                                        [ data "bs-toggle" "tooltip"
+                                        , data "bs-placement" "left"
+                                        , Html.Attributes.title "Delete"
+                                        , Html.Attributes.attribute "role" "button"
+                                        , Html.Events.onClick (Delete payment.id)
+                                        ]
+                                        [ Html.i [ Html.Attributes.class "bi bi-trash" ] [] ]
+                                    ]
+                                )
                             ]
                         )
                     )
@@ -323,6 +379,25 @@ viewAdd participantModel model =
                     ]
         ]
     , textInput "Amount" model.amount CreateEditAmount
+    , Html.fieldset [ Html.Attributes.class "row mb-3" ]
+        [ Html.label
+            [ Html.Attributes.class "col-form-label col-sm-3 pt-0"
+            , Html.Attributes.for "new-payments-done"
+            ]
+            [ text "Done" ]
+        , div [ Html.Attributes.class "col-sm-9" ]
+            [ div [ Html.Attributes.class "form-check" ]
+                [ Html.input
+                    [ Html.Attributes.id "new-payments-done"
+                    , Html.Attributes.type_ "checkbox"
+                    , Html.Attributes.class "form-check-input"
+                    , Html.Attributes.checked model.done
+                    , Html.Events.onCheck CreateSetDone
+                    ]
+                    []
+                ]
+            ]
+        ]
     ]
 
 
@@ -493,6 +568,20 @@ update balances msg model =
                     (update balances)
                     (amount |> String.fromAmount |> CreateEditAmount)
 
+        CreateSetDone done ->
+            ( ( { model
+                    | create =
+                        model.create
+                            |> Maybe.map
+                                (\createModel ->
+                                    { createModel | done = done }
+                                )
+                }
+              , False
+              )
+            , Cmd.none
+            )
+
         CreateSubmit ->
             let
                 id =
@@ -512,8 +601,8 @@ update balances msg model =
                     in
                     ( ( model, False ), Cmd.none )
 
-                Ok payment ->
-                    ( ( model |> addPayments [ payment ] (id + 1), True )
+                Ok ( payment, done ) ->
+                    ( ( model |> addPayments [ payment ] done (id + 1), True )
                     , Update.delegate CloseModal
                     )
 
@@ -536,6 +625,9 @@ update balances msg model =
                     ( ( { model
                             | payments = newPayments
                             , paymentBalance = paymentBalance
+
+                            -- Technically needed even though it's currently redundant as deletion isn't exposed to done payments.
+                            , donePayments = model.donePayments |> Set.remove paymentId
                         }
                       , True
                       )
@@ -551,6 +643,7 @@ update balances msg model =
                           , amount = amount
                           }
                         ]
+                        False
                         (model.nextId + 1)
               , True
               )
@@ -579,7 +672,25 @@ update balances msg model =
                             )
                             ( [], model.nextId )
             in
-            ( ( model |> addPayments (paymentsReversed |> List.reverse) nextId, True ), Cmd.none )
+            ( ( model |> addPayments (paymentsReversed |> List.reverse) False nextId, True ), Cmd.none )
+
+        SetDone paymentId done ->
+            ( ( { model
+                    | donePayments =
+                        let
+                            updateSet =
+                                if done then
+                                    Set.insert
+
+                                else
+                                    Set.remove
+                        in
+                        model.donePayments |> updateSet paymentId
+                }
+              , True
+              )
+            , Cmd.none
+            )
 
         LayoutMsg layoutMsg ->
             case layoutMsg of
@@ -604,8 +715,8 @@ update balances msg model =
             ( ( model, False ), Cmd.none )
 
 
-addPayments : List Payment -> Int -> Model -> Model
-addPayments payments nextId model =
+addPayments : List Payment -> Bool -> Int -> Model -> Model
+addPayments payments done nextId model =
     { model
         | payments = model.payments ++ payments
         , paymentBalance =
@@ -617,6 +728,12 @@ addPayments payments nextId model =
                     )
                     model.paymentBalance
         , nextId = nextId
+        , donePayments =
+            if done then
+                payments |> List.foldl (.id >> Set.insert) model.donePayments
+
+            else
+                model.donePayments
     }
 
 
