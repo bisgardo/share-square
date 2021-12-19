@@ -301,7 +301,7 @@ viewCreateModal participantModel model =
     in
     Html.form
         [ Html.Events.onSubmit CreateSubmit ]
-        [ modal createModalId "Add payment" body disable ]
+        [ modal createModalId "Add payment" body disable Nothing ]
 
 
 viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
