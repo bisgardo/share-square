@@ -42,7 +42,7 @@ type alias ComputedModel =
     }
 
 
-import_ : List Payment.Payment -> Model -> Model
+import_ : Payment.StorageValues -> Model -> Model
 import_ payments model =
     { model
         | computed = Nothing
@@ -81,7 +81,7 @@ viewBalances participants model =
 
                                 Just suggestedPayments ->
                                     [ Html.button
-                                        [Html.Attributes.class "ms-1 badge btn btn-primary"
+                                        [ Html.Attributes.class "ms-1 badge btn btn-primary"
                                         , Html.Events.onClick (Payment.ApplyAllSuggestedPayments suggestedPayments |> PaymentMsg)
                                         ]
                                         [ Html.text "apply all" ]

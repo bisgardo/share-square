@@ -85,7 +85,7 @@ type StorageWriteError
 type alias StorageValues =
     { participants : List Participant
     , expenses : List Expense
-    , payments : List Payment
+    , payments : Payment.StorageValues
     }
 
 
@@ -116,14 +116,14 @@ storageValuesDecoder =
         -- expenses
         (Decode.field "e" <| Decode.nullableList Expense.decoder)
         -- payments
-        (Decode.field "y" <| Decode.nullableList Payment.decoder)
+        (Decode.field "y" <| Payment.decoder)
 
 
 encodeStorageValues : StorageValues -> String
 encodeStorageValues values =
     [ ( "p", values.participants |> Encode.list Participant.encode )
     , ( "e", values.expenses |> Encode.list Expense.encode )
-    , ( "y", values.payments |> Encode.list Payment.encode )
+    , ( "y", values.payments |> Payment.encode )
     ]
         |> Encode.object
         |> Encode.encode 0
@@ -550,5 +550,5 @@ export : Model -> StorageValues
 export model =
     { participants = model.expense.participant.participants
     , expenses = model.expense.expenses
-    , payments = model.computation.payment.payments
+    , payments = Payment.export model.computation.payment
     }
