@@ -247,6 +247,10 @@ tabIds =
     }
 
 
+settlementToggleId =
+    "settlement-toggle"
+
+
 view : Model -> Browser.Document Msg
 view model =
     { title = "Share 'n square"
@@ -346,6 +350,10 @@ viewStorageModeSelector mode =
 
 viewContent : Model -> List (Html Msg)
 viewContent model =
+    let
+        disableSettlementTab =
+            model.expense.expenses |> List.isEmpty
+    in
     [ Html.ul [ Html.Attributes.class "nav nav-tabs mb-2" ]
         [ Html.li [ Html.Attributes.class "nav-item" ]
             [ Html.button
@@ -357,11 +365,7 @@ viewContent model =
                 [ Html.text "Expenses" ]
             ]
         , Html.li [ Html.Attributes.class "nav-item" ]
-            [ let
-                disableSettlementTab =
-                    model.expense.expenses |> List.isEmpty
-              in
-              if disableSettlementTab then
+            [ if disableSettlementTab then
                 Html.div
                     [ data "bs-toggle" "tooltip"
                     , data "bs-placement" "right"
@@ -380,6 +384,7 @@ viewContent model =
               else
                 Html.button
                     [ Html.Attributes.type_ "button"
+                    , Html.Attributes.id settlementToggleId
                     , data "bs-toggle" "tab"
                     , data "bs-target" ("#" ++ tabIds.settlement)
                     , Html.Attributes.class "nav-link"
@@ -397,7 +402,24 @@ viewContent model =
             [ Html.Attributes.id tabIds.expenses
             , Html.Attributes.class "tab-pane fade active show"
             ]
-            (viewExpenses model)
+            (viewExpenses model
+                ++ (if disableSettlementTab then
+                        []
+
+                    else
+                        [ Html.p [] []
+                        , Html.p []
+                            [ Html.label [ Html.Attributes.for settlementToggleId, Html.Attributes.class "float-end" ]
+                                [ Html.span
+                                    [ Html.Attributes.class "btn btn-outline-secondary" ]
+                                    [ Html.text "Go to Settlement"
+                                    , Html.i [ Html.Attributes.class "bi bi-caret-right" ] []
+                                    ]
+                                ]
+                            ]
+                        ]
+                   )
+            )
         , Html.div
             [ Html.Attributes.id tabIds.settlement
             , Html.Attributes.class "tab-pane fade"
