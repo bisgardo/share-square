@@ -2,6 +2,7 @@ module Expense exposing (..)
 
 import Browser.Dom as Dom
 import Dict exposing (Dict)
+import Dict.Extra as Dict
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events
@@ -9,6 +10,7 @@ import Html.Keyed
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
+import List.Extra as List
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
 import Set exposing (Set)
@@ -31,7 +33,7 @@ maxDescriptionLength =
 
 
 type Msg
-    = LoadCreate
+    = LoadCreate (Maybe Int)
     | CloseModal
     | CreateEditPayer String
     | CreateEditAmount String
@@ -60,6 +62,7 @@ type alias CreateModel =
     , amount : Validated Field
     , description : Validated Field
     , receivers : Dict String Float
+    , editId : Maybe Int
     }
 
 
@@ -197,8 +200,8 @@ init =
 
 
 initCreate : String -> Dict String Float -> CreateModel
-initCreate initPayerId initReceiverIds =
-    { payerId = initPayerId
+initCreate payerId receiverIds =
+    { payerId = payerId
     , amount =
         { key = "expense-create-amount"
         , value = ""
@@ -209,7 +212,8 @@ initCreate initPayerId initReceiverIds =
         , value = ""
         , feedback = None
         }
-    , receivers = initReceiverIds
+    , receivers = receiverIds
+    , editId = Nothing
     }
 
 
@@ -287,14 +291,20 @@ view model =
                                     )
                                     model.participant.participants
                                 ++ [ Html.td
-                                        [ Html.Attributes.align "right", Html.Events.onClick (Delete expense.id) ]
+                                        [ Html.Attributes.align "right", Html.Events.onClick (LoadCreate (Just expense.id)) ]
                                         [ Html.a
                                             [ data "bs-toggle" "tooltip"
                                             , data "bs-placement" "left"
-                                            , Html.Attributes.title "Delete"
+                                            , Html.Attributes.title "Edit"
                                             , Html.Attributes.attribute "role" "button"
                                             ]
-                                            [ Html.i [ class "bi bi-trash" ] [] ]
+                                            [ Html.i
+                                                [ class "bi bi-pencil-square"
+                                                , data "bs-toggle" "modal"
+                                                , data "bs-target" ("#" ++ createModalId)
+                                                ]
+                                                []
+                                            ]
                                         ]
                                    ]
                             )
@@ -321,7 +331,7 @@ viewCreateOpen model =
                 "Add expense"
                 [ Html.Attributes.class "w-100"
                 , Html.Attributes.disabled disabled
-                , Html.Events.onClick LoadCreate
+                , Html.Events.onClick (LoadCreate Nothing)
                 ]
     in
     if disabled then
@@ -353,7 +363,7 @@ viewCreateModal model =
     in
     Html.form
         [ Html.Events.onSubmit CreateSubmit ]
-        [ modal createModalId "Add expense" body disable ]
+        [ modal createModalId "Add expense" body disable (model.create |> Maybe.andThen .editId |> Maybe.map Delete) ]
 
 
 viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
@@ -393,55 +403,118 @@ subscriptions model =
 update : Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update msg model =
     case msg of
-        LoadCreate ->
-            ( ( { model
-                    | create =
-                        model.participant.participants
-                            |> List.head
-                            |> Maybe.map
-                                (\firstParticipant ->
-                                    initCreate
-                                        (firstParticipant.id |> String.fromInt)
-                                        (model.participant.participants
-                                            |> List.map (.id >> String.fromInt)
-                                            |> List.map (\key -> ( key, 1.0 ))
-                                            |> Dict.fromList
-                                        )
-                                )
-                }
-              , False
-              )
-            , Cmd.none
-            )
+        LoadCreate editId ->
+            let
+                createModel =
+                    case editId of
+                        Nothing ->
+                            model.participant.participants
+                                |> List.head
+                                |> Maybe.map
+                                    (\firstParticipant ->
+                                        initCreate
+                                            (firstParticipant.id |> String.fromInt)
+                                            (model.participant.participants
+                                                |> List.map (.id >> String.fromInt)
+                                                |> List.map (\key -> ( key, 1.0 ))
+                                                |> Dict.fromList
+                                            )
+                                    )
+
+                        Just id ->
+                            case model.expenses |> List.find (.id >> (==) id) of
+                                Nothing ->
+                                    let
+                                        _ =
+                                            Debug.log "error" "not found..."
+                                    in
+                                    model.create
+
+                                Just expense ->
+                                    let
+                                        newCreateModel =
+                                            initCreate
+                                                (expense.payer |> String.fromInt)
+                                                (expense.receivers |> Dict.mapKeys String.fromInt)
+
+                                        descriptionField =
+                                            newCreateModel.description
+
+                                        amountField =
+                                            newCreateModel.amount
+                                    in
+                                    Just
+                                        { newCreateModel
+                                            | description =
+                                                { descriptionField | value = expense.description }
+                                            , amount = { amountField | value = expense.amount |> String.fromFloat }
+                                            , editId = editId
+                                        }
+            in
+            if createModel |> Maybe.isNothing then
+                ( ( model, False ), Cmd.none )
+
+            else
+                ( ( { model | create = createModel }, False ), Cmd.none )
 
         CreateSubmit ->
-            let
-                id =
-                    model.nextId
-
-                expense =
-                    model.create
-                        |> Result.fromMaybe "no create model found"
-                        |> Result.andThen (create id)
-            in
-            case expense of
-                Err error ->
-                    -- TODO Print error on page.
+            case model.create of
+                Nothing ->
                     let
+                        -- TODO Print error on page.
                         _ =
-                            Debug.log "error" error
+                            Debug.log "error" "no create model found"
                     in
                     ( ( model, False ), Cmd.none )
 
-                Ok value ->
-                    ( ( { model
-                            | expenses = model.expenses ++ [ value ]
-                            , nextId = id + 1
-                        }
-                      , True
-                      )
-                    , Update.delegate CloseModal
-                    )
+                Just createModel ->
+                    case createModel.editId of
+                        Nothing ->
+                            let
+                                expense =
+                                    createModel |> create model.nextId
+                            in
+                            case expense of
+                                Err error ->
+                                    let
+                                        -- TODO Print error on page.
+                                        _ =
+                                            Debug.log "error" error
+                                    in
+                                    ( ( model, False ), Cmd.none )
+
+                                Ok value ->
+                                    ( ( { model
+                                            | expenses = model.expenses ++ [ value ]
+                                            , nextId = model.nextId + 1
+                                        }
+                                      , True
+                                      )
+                                    , Update.delegate CloseModal
+                                    )
+
+                        Just editId ->
+                            let
+                                expense =
+                                    createModel |> create editId
+                            in
+                            case expense of
+                                Err error ->
+                                    let
+                                        -- TODO Print error on page.
+                                        _ =
+                                            Debug.log "error" error
+                                    in
+                                    ( ( model, False ), Cmd.none )
+
+                                Ok value ->
+                                    ( ( { model
+                                            | expenses = model.expenses |> List.setIf (.id >> (==) editId) value
+                                        }
+                                      , True
+                                      )
+                                    , Update.delegate CloseModal
+                                    )
 
         CloseModal ->
             ( ( model, False ), closeModal createModalId )
@@ -536,7 +609,10 @@ update msg model =
                 }
               , True
               )
-            , createModalOpenId |> Dom.focus |> Task.attempt DomMsg
+            , Cmd.batch
+                [ createModalOpenId |> Dom.focus |> Task.attempt DomMsg
+                , Update.delegate CloseModal
+                ]
             )
 
         LayoutMsg layoutMsg ->
