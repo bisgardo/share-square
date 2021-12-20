@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Amount
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Computation
@@ -46,6 +47,9 @@ storageUrlNone =
 storageUrlLocal =
     "local"
 
+
+locale : Amount.Locale
+locale = { decimalPlaces = 2, decimalSeparator = ".", otherSeparator = "," }
 
 type alias Flags =
     { environment : String
@@ -432,14 +436,14 @@ viewContent model =
 viewExpenses : Model -> List (Html Msg)
 viewExpenses model =
     model.expense
-        |> Expense.view
+        |> Expense.view locale
         |> List.map (Html.map ExpenseMsg)
 
 
 viewComputation : Model -> List (Html Msg)
 viewComputation model =
     model.computation
-        |> Computation.view model.expense.participant
+        |> Computation.view locale model.expense.participant
         |> Html.map ComputationMsg
         |> List.singleton
 
@@ -450,12 +454,12 @@ update msg model =
         ExpenseMsg expenseMsg ->
             let
                 ( ( expenseModel, expenseModelChanged ), expensesCmd ) =
-                    model.expense |> Expense.update expenseMsg
+                    model.expense |> Expense.update locale expenseMsg
 
                 ( ( computationModel, computationModelChanged ), computationCmd ) =
                     if expenseModelChanged then
                         model.computation
-                            |> Computation.update Computation.Disable
+                            |> Computation.update locale Computation.Disable
 
                     else
                         ( ( model.computation, False ), Cmd.none )
@@ -478,7 +482,7 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Computation.update computationMsg
+                    model.computation |> Computation.update locale computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch

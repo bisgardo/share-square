@@ -1,5 +1,6 @@
 module Expense exposing (..)
 
+import Amount exposing (Amount)
 import Browser.Dom as Dom
 import Dict exposing (Dict)
 import Dict.Extra as Dict
@@ -16,7 +17,6 @@ import Participant exposing (Participant)
 import Set exposing (Set)
 import Task
 import Util.Dict as Dict
-import Util.String as String
 import Util.Update as Update
 
 
@@ -61,7 +61,7 @@ type alias CreateModel =
     { payerId : String
     , amount : Validated Field
     , description : Validated Field
-    , receivers : Dict String Float
+    , receivers : Dict String Float -- TODO should just be Set
     , editId : Maybe Int
     }
 
@@ -69,7 +69,7 @@ type alias CreateModel =
 type alias Expense =
     { id : Int
     , payer : Int
-    , amount : Float
+    , amount : Amount
     , description : String
     , receivers : Dict Int Float -- map from participant ID to fractional part
     }
@@ -84,7 +84,7 @@ decoder =
         -- payer ID
         (Decode.field "p" Decode.int)
         -- amount
-        (Decode.field "a" Decode.float)
+        (Decode.field "a" Decode.int)
         -- description
         (Decode.maybe (Decode.field "d" Decode.string) |> Decode.map (Maybe.withDefault ""))
         -- receivers
@@ -100,7 +100,7 @@ encode : Expense -> Value
 encode expense =
     [ Just ( "i", expense.id |> Encode.int )
     , Just ( "p", expense.payer |> Encode.int )
-    , Just ( "a", expense.amount |> Encode.float )
+    , Just ( "a", expense.amount |> Amount.encode )
     , if expense.description |> String.isEmpty then
         Nothing
 
@@ -135,8 +135,8 @@ import_ participants expenses model =
     }
 
 
-create : Int -> CreateModel -> Result String Expense
-create id model =
+create : Amount.Locale -> Int -> CreateModel -> Result String Expense
+create locale id model =
     -- Should probably run values though their validators...
     let
         payerResult =
@@ -148,7 +148,7 @@ create id model =
                     Ok payerId
 
         amountResult =
-            case model.amount.value |> String.toFloat of
+            case model.amount.value |> Amount.fromString locale of
                 Nothing ->
                     Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
@@ -217,8 +217,8 @@ initCreate payerId receiverIds =
     }
 
 
-view : Model -> List (Html Msg)
-view model =
+view : Amount.Locale -> Model -> List (Html Msg)
+view locale model =
     [ Html.table [ class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -276,7 +276,7 @@ view model =
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
                              , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
-                             , Html.td [] [ Html.text (expense.amount |> String.fromAmount) ]
+                             , Html.td [] [ Html.text (expense.amount |> Amount.toString locale) ]
                              , Html.td [] [ Html.text expense.description ]
                              ]
                                 ++ List.map
@@ -400,8 +400,8 @@ subscriptions model =
         |> Sub.batch
 
 
-update : Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update msg model =
+update : Amount.Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update locale msg model =
     case msg of
         LoadCreate editId ->
             let
@@ -447,7 +447,7 @@ update msg model =
                                         { newCreateModel
                                             | description =
                                                 { descriptionField | value = expense.description }
-                                            , amount = { amountField | value = expense.amount |> String.fromFloat }
+                                            , amount = { amountField | value = expense.amount |> Amount.toString locale }
                                             , editId = editId
                                         }
             in
@@ -472,7 +472,7 @@ update msg model =
                         Nothing ->
                             let
                                 expense =
-                                    createModel |> create model.nextId
+                                    createModel |> create locale model.nextId
                             in
                             case expense of
                                 Err error ->
@@ -496,7 +496,7 @@ update msg model =
                         Just editId ->
                             let
                                 expense =
-                                    createModel |> create editId
+                                    createModel |> create locale editId
                             in
                             case expense of
                                 Err error ->
@@ -547,7 +547,7 @@ update msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = validateAmount amount
+                                                , feedback = validateAmount locale amount
                                             }
                                     }
                                 )
@@ -647,13 +647,13 @@ update msg model =
             )
 
 
-validateAmount : String -> Feedback
-validateAmount amount =
+validateAmount : Amount.Locale -> String -> Feedback
+validateAmount locale amount =
     if amount |> String.isEmpty then
         None
 
     else
-        case amount |> String.toFloat of
+        case amount |> Amount.fromString locale of
             Nothing ->
                 Error "Not a number."
 

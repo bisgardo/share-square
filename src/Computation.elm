@@ -1,5 +1,6 @@
 module Computation exposing (..)
 
+import Amount exposing (Amount)
 import Dict exposing (Dict)
 import Expense exposing (Expense)
 import Html exposing (Html, div, text)
@@ -12,7 +13,6 @@ import Participant exposing (lookupName)
 import Payment
 import Util.Dict as Dict
 import Util.Maybe as Maybe
-import Util.String as String
 
 
 type alias Model =
@@ -37,8 +37,8 @@ init =
 type alias ComputedModel =
     { expenses : Expenses
     , debts : Expenses
-    , balance : Dict Int Float
-    , suggestedPayments : Dict Int (List ( Int, Float ))
+    , balance : Dict Int Amount
+    , suggestedPayments : Dict Int (List ( Int, Amount ))
     }
 
 
@@ -56,18 +56,18 @@ type Msg
     | PaymentMsg Payment.Msg
 
 
-view : Participant.Model -> Model -> Html Msg
-view participantModel model =
+view : Amount.Locale -> Participant.Model -> Model -> Html Msg
+view locale participantModel model =
     div [ Html.Attributes.class "col" ] <|
         [ Html.h3 [] [ text "Balances" ]
-        , viewBalances participantModel.idToName model
+        , viewBalances locale participantModel.idToName model
         , Html.h3 [] [ text "Payments" ]
         ]
-            ++ (Payment.view participantModel model.payment |> List.map (Html.map PaymentMsg))
+            ++ (Payment.view locale participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
-viewBalances : Dict Int String -> Model -> Html Msg
-viewBalances participants model =
+viewBalances : Amount.Locale -> Dict Int String -> Model -> Html Msg
+viewBalances locale participants model =
     Html.table [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -132,7 +132,7 @@ viewBalances participants model =
                                                 "text-decoration-line-through"
                                         ]
                                         [ Html.td [] [ text participantName ]
-                                        , Html.td [] [ text (amount |> String.fromAmountSigned) ]
+                                        , Html.td [] [ text (amount |> Amount.toStringSigned locale) ]
                                         , Html.td []
                                             (computed.suggestedPayments
                                                 |> Dict.get participantId
@@ -158,7 +158,7 @@ viewBalances participants model =
                                                                         )
                                                                         [ Html.text <|
                                                                             "Pay "
-                                                                                ++ String.fromAmount suggestedAmount
+                                                                                ++ Amount.toString locale suggestedAmount
                                                                                 ++ " to "
                                                                                 ++ receiverName
                                                                         ]
@@ -177,7 +177,7 @@ viewBalances participants model =
 {-| A dict from ID of payer to dict from ID of receiver to totally expensed amount.
 -}
 type alias Expenses =
-    Dict Int (Dict Int Float)
+    Dict Int (Dict Int Amount)
 
 
 {-| A dict from ID of receiver to dict from ID of payer to totally expensed amount.
@@ -199,14 +199,14 @@ expensesFromList =
                 weightedDebt =
                     expense.receivers
                         |> Dict.foldl
-                            (\receiver amount innerResult ->
+                            (\receiver part innerResult ->
                                 if receiver == expense.payer then
                                     -- Ignore debt to self.
                                     innerResult
 
                                 else
                                     innerResult
-                                        |> Dict.insert receiver (amount * expense.amount / weightSum)
+                                        |> Dict.insert receiver (part * (toFloat expense.amount) / weightSum |> round)
                             )
                             Dict.empty
             in
@@ -248,8 +248,8 @@ subscriptions =
     .payment >> Payment.subscriptions >> Sub.map PaymentMsg
 
 
-update : Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update msg model =
+update : Amount.Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update locale msg model =
     case msg of
         Disable ->
             ( ( { model | computed = Nothing }, False ), Cmd.none )
@@ -296,7 +296,7 @@ update msg model =
         PaymentMsg paymentMsg ->
             let
                 ( ( paymentModel, modelChanged ), paymentCmd ) =
-                    model.payment |> Payment.update (model.computed |> Maybe.map .balance) paymentMsg
+                    model.payment |> Payment.update locale (model.computed |> Maybe.map .balance) paymentMsg
             in
             ( ( { model
                     | payment = paymentModel
