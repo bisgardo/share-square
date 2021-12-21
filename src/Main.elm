@@ -48,8 +48,13 @@ storageUrlLocal =
     "local"
 
 
-locale : Amount.Locale
-locale = { decimalPlaces = 2, decimalSeparator = ".", otherSeparator = "," }
+defaultLocale : Amount.Locale
+defaultLocale =
+    { decimalPlaces = 2
+    , decimalSeparator = "."
+    , otherSeparator = ","
+    }
+
 
 type alias Flags =
     { environment : String
@@ -436,14 +441,14 @@ viewContent model =
 viewExpenses : Model -> List (Html Msg)
 viewExpenses model =
     model.expense
-        |> Expense.view locale
+        |> Expense.view defaultLocale
         |> List.map (Html.map ExpenseMsg)
 
 
 viewComputation : Model -> List (Html Msg)
 viewComputation model =
     model.computation
-        |> Computation.view locale model.expense.participant
+        |> Computation.view defaultLocale model.expense.participant
         |> Html.map ComputationMsg
         |> List.singleton
 
@@ -454,12 +459,12 @@ update msg model =
         ExpenseMsg expenseMsg ->
             let
                 ( ( expenseModel, expenseModelChanged ), expensesCmd ) =
-                    model.expense |> Expense.update locale expenseMsg
+                    model.expense |> Expense.update defaultLocale expenseMsg
 
                 ( ( computationModel, computationModelChanged ), computationCmd ) =
                     if expenseModelChanged then
                         model.computation
-                            |> Computation.update locale Computation.Disable
+                            |> Computation.update defaultLocale Computation.Disable
 
                     else
                         ( ( model.computation, False ), Cmd.none )
@@ -482,7 +487,7 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Computation.update locale computationMsg
+                    model.computation |> Computation.update defaultLocale computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch
