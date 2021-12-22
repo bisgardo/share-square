@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Amount
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Computation
@@ -47,6 +48,18 @@ storageUrlLocal =
     "local"
 
 
+{-| To be expanded to include display strings.
+-}
+defaultLocale : Amount.Locale
+defaultLocale =
+    --{ decimalPlaces = 3
+    --, decimalSeparator = ","
+    --}
+    { decimalPlaces = 2
+    , decimalSeparator = "."
+    }
+
+
 type alias Flags =
     { environment : String
     }
@@ -55,6 +68,7 @@ type alias Flags =
 type alias Model =
     { environment : String
     , key : Browser.Navigation.Key
+    , locale : Amount.Locale
     , expense : Expense.Model
     , computation : Computation.Model
     , storageMode : Storage.Mode
@@ -174,6 +188,7 @@ init flags url key =
     in
     ( { environment = flags.environment
       , key = key
+      , locale = defaultLocale
       , expense = expenseModel
       , computation = computationModel
       , storageMode = storageMode
@@ -432,14 +447,14 @@ viewContent model =
 viewExpenses : Model -> List (Html Msg)
 viewExpenses model =
     model.expense
-        |> Expense.view
+        |> Expense.view model.locale
         |> List.map (Html.map ExpenseMsg)
 
 
 viewComputation : Model -> List (Html Msg)
 viewComputation model =
     model.computation
-        |> Computation.view model.expense.participant
+        |> Computation.view model.locale model.expense.participant
         |> Html.map ComputationMsg
         |> List.singleton
 
@@ -450,12 +465,12 @@ update msg model =
         ExpenseMsg expenseMsg ->
             let
                 ( ( expenseModel, expenseModelChanged ), expensesCmd ) =
-                    model.expense |> Expense.update expenseMsg
+                    model.expense |> Expense.update model.locale expenseMsg
 
                 ( ( computationModel, computationModelChanged ), computationCmd ) =
                     if expenseModelChanged then
                         model.computation
-                            |> Computation.update Computation.Disable
+                            |> Computation.update model.locale Computation.Disable
 
                     else
                         ( ( model.computation, False ), Cmd.none )
@@ -478,7 +493,7 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Computation.update computationMsg
+                    model.computation |> Computation.update model.locale computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch
