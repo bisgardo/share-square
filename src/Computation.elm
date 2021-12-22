@@ -206,7 +206,7 @@ expensesFromList =
 
                                 else
                                     innerResult
-                                        |> Dict.insert receiver (part * (toFloat expense.amount) / weightSum |> round)
+                                        |> Dict.insert receiver (part * (expense.amount |> toFloat) / weightSum |> round)
                             )
                             Dict.empty
             in
