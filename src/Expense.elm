@@ -1,7 +1,9 @@
 module Expense exposing (..)
 
+import Amount exposing (Amount)
 import Browser.Dom as Dom
 import Dict exposing (Dict)
+import Dict.Extra as Dict
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events
@@ -9,12 +11,12 @@ import Html.Keyed
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
+import List.Extra as List
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
 import Set exposing (Set)
 import Task
 import Util.Dict as Dict
-import Util.String as String
 import Util.Update as Update
 
 
@@ -31,7 +33,7 @@ maxDescriptionLength =
 
 
 type Msg
-    = LoadCreate
+    = LoadCreate (Maybe Int)
     | CloseModal
     | CreateEditPayer String
     | CreateEditAmount String
@@ -59,14 +61,15 @@ type alias CreateModel =
     { payerId : String
     , amount : Validated Field
     , description : Validated Field
-    , receivers : Dict String Float
+    , receivers : Dict String Float -- TODO should just be Set
+    , editId : Maybe Int
     }
 
 
 type alias Expense =
     { id : Int
     , payer : Int
-    , amount : Float
+    , amount : Amount
     , description : String
     , receivers : Dict Int Float -- map from participant ID to fractional part
     }
@@ -81,7 +84,7 @@ decoder =
         -- payer ID
         (Decode.field "p" Decode.int)
         -- amount
-        (Decode.field "a" Decode.float)
+        (Decode.field "a" Decode.int)
         -- description
         (Decode.maybe (Decode.field "d" Decode.string) |> Decode.map (Maybe.withDefault ""))
         -- receivers
@@ -97,7 +100,7 @@ encode : Expense -> Value
 encode expense =
     [ Just ( "i", expense.id |> Encode.int )
     , Just ( "p", expense.payer |> Encode.int )
-    , Just ( "a", expense.amount |> Encode.float )
+    , Just ( "a", expense.amount |> Amount.encode )
     , if expense.description |> String.isEmpty then
         Nothing
 
@@ -132,8 +135,8 @@ import_ participants expenses model =
     }
 
 
-create : Int -> CreateModel -> Result String Expense
-create id model =
+create : Amount.Locale -> Int -> CreateModel -> Result String Expense
+create locale id model =
     -- Should probably run values though their validators...
     let
         payerResult =
@@ -145,7 +148,7 @@ create id model =
                     Ok payerId
 
         amountResult =
-            case model.amount.value |> String.toFloat of
+            case model.amount.value |> Amount.fromString locale of
                 Nothing ->
                     Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
@@ -197,8 +200,8 @@ init =
 
 
 initCreate : String -> Dict String Float -> CreateModel
-initCreate initPayerId initReceiverIds =
-    { payerId = initPayerId
+initCreate payerId receiverIds =
+    { payerId = payerId
     , amount =
         { key = "expense-create-amount"
         , value = ""
@@ -209,12 +212,13 @@ initCreate initPayerId initReceiverIds =
         , value = ""
         , feedback = None
         }
-    , receivers = initReceiverIds
+    , receivers = receiverIds
+    , editId = Nothing
     }
 
 
-view : Model -> List (Html Msg)
-view model =
+view : Amount.Locale -> Model -> List (Html Msg)
+view locale model =
     [ Html.table [ class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -272,7 +276,7 @@ view model =
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
                              , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
-                             , Html.td [] [ Html.text (expense.amount |> String.fromAmount) ]
+                             , Html.td [] [ Html.text (expense.amount |> Amount.toString locale) ]
                              , Html.td [] [ Html.text expense.description ]
                              ]
                                 ++ List.map
@@ -287,14 +291,20 @@ view model =
                                     )
                                     model.participant.participants
                                 ++ [ Html.td
-                                        [ Html.Attributes.align "right", Html.Events.onClick (Delete expense.id) ]
+                                        [ Html.Attributes.align "right", Html.Events.onClick (LoadCreate (Just expense.id)) ]
                                         [ Html.a
                                             [ data "bs-toggle" "tooltip"
                                             , data "bs-placement" "left"
-                                            , Html.Attributes.title "Delete"
+                                            , Html.Attributes.title "Edit"
                                             , Html.Attributes.attribute "role" "button"
                                             ]
-                                            [ Html.i [ class "bi bi-trash" ] [] ]
+                                            [ Html.i
+                                                [ class "bi bi-pencil-square"
+                                                , data "bs-toggle" "modal"
+                                                , data "bs-target" ("#" ++ createModalId)
+                                                ]
+                                                []
+                                            ]
                                         ]
                                    ]
                             )
@@ -321,7 +331,7 @@ viewCreateOpen model =
                 "Add expense"
                 [ Html.Attributes.class "w-100"
                 , Html.Attributes.disabled disabled
-                , Html.Events.onClick LoadCreate
+                , Html.Events.onClick (LoadCreate Nothing)
                 ]
     in
     if disabled then
@@ -353,7 +363,7 @@ viewCreateModal model =
     in
     Html.form
         [ Html.Events.onSubmit CreateSubmit ]
-        [ modal createModalId "Add expense" body disable ]
+        [ modal createModalId "Add expense" body disable (model.create |> Maybe.andThen .editId |> Maybe.map Delete) ]
 
 
 viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
@@ -390,58 +400,121 @@ subscriptions model =
         |> Sub.batch
 
 
-update : Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update msg model =
+update : Amount.Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update locale msg model =
     case msg of
-        LoadCreate ->
-            ( ( { model
-                    | create =
-                        model.participant.participants
-                            |> List.head
-                            |> Maybe.map
-                                (\firstParticipant ->
-                                    initCreate
-                                        (firstParticipant.id |> String.fromInt)
-                                        (model.participant.participants
-                                            |> List.map (.id >> String.fromInt)
-                                            |> List.map (\key -> ( key, 1.0 ))
-                                            |> Dict.fromList
-                                        )
-                                )
-                }
-              , False
-              )
-            , Cmd.none
-            )
+        LoadCreate editId ->
+            let
+                createModel =
+                    case editId of
+                        Nothing ->
+                            model.participant.participants
+                                |> List.head
+                                |> Maybe.map
+                                    (\firstParticipant ->
+                                        initCreate
+                                            (firstParticipant.id |> String.fromInt)
+                                            (model.participant.participants
+                                                |> List.map (.id >> String.fromInt)
+                                                |> List.map (\key -> ( key, 1.0 ))
+                                                |> Dict.fromList
+                                            )
+                                    )
+
+                        Just id ->
+                            case model.expenses |> List.find (.id >> (==) id) of
+                                Nothing ->
+                                    let
+                                        _ =
+                                            Debug.log "error" "not found..."
+                                    in
+                                    model.create
+
+                                Just expense ->
+                                    let
+                                        newCreateModel =
+                                            initCreate
+                                                (expense.payer |> String.fromInt)
+                                                (expense.receivers |> Dict.mapKeys String.fromInt)
+
+                                        descriptionField =
+                                            newCreateModel.description
+
+                                        amountField =
+                                            newCreateModel.amount
+                                    in
+                                    Just
+                                        { newCreateModel
+                                            | description =
+                                                { descriptionField | value = expense.description }
+                                            , amount = { amountField | value = expense.amount |> Amount.toString locale }
+                                            , editId = editId
+                                        }
+            in
+            if createModel |> Maybe.isNothing then
+                ( ( model, False ), Cmd.none )
+
+            else
+                ( ( { model | create = createModel }, False ), Cmd.none )
 
         CreateSubmit ->
-            let
-                id =
-                    model.nextId
-
-                expense =
-                    model.create
-                        |> Result.fromMaybe "no create model found"
-                        |> Result.andThen (create id)
-            in
-            case expense of
-                Err error ->
-                    -- TODO Print error on page.
+            case model.create of
+                Nothing ->
                     let
+                        -- TODO Print error on page.
                         _ =
-                            Debug.log "error" error
+                            Debug.log "error" "no create model found"
                     in
                     ( ( model, False ), Cmd.none )
 
-                Ok value ->
-                    ( ( { model
-                            | expenses = model.expenses ++ [ value ]
-                            , nextId = id + 1
-                        }
-                      , True
-                      )
-                    , Update.delegate CloseModal
-                    )
+                Just createModel ->
+                    case createModel.editId of
+                        Nothing ->
+                            let
+                                expense =
+                                    createModel |> create locale model.nextId
+                            in
+                            case expense of
+                                Err error ->
+                                    let
+                                        -- TODO Print error on page.
+                                        _ =
+                                            Debug.log "error" error
+                                    in
+                                    ( ( model, False ), Cmd.none )
+
+                                Ok value ->
+                                    ( ( { model
+                                            | expenses = model.expenses ++ [ value ]
+                                            , nextId = model.nextId + 1
+                                        }
+                                      , True
+                                      )
+                                    , Update.delegate CloseModal
+                                    )
+
+                        Just editId ->
+                            let
+                                expense =
+                                    createModel |> create locale editId
+                            in
+                            case expense of
+                                Err error ->
+                                    let
+                                        -- TODO Print error on page.
+                                        _ =
+                                            Debug.log "error" error
+                                    in
+                                    ( ( model, False ), Cmd.none )
+
+                                Ok value ->
+                                    ( ( { model
+                                            | expenses = model.expenses |> List.setIf (.id >> (==) editId) value
+                                        }
+                                      , True
+                                      )
+                                    , Update.delegate CloseModal
+                                    )
 
         CloseModal ->
             ( ( model, False ), closeModal createModalId )
@@ -474,7 +547,7 @@ update msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = validateAmount amount
+                                                , feedback = validateAmount locale amount
                                             }
                                     }
                                 )
@@ -536,7 +609,10 @@ update msg model =
                 }
               , True
               )
-            , createModalOpenId |> Dom.focus |> Task.attempt DomMsg
+            , Cmd.batch
+                [ createModalOpenId |> Dom.focus |> Task.attempt DomMsg
+                , Update.delegate CloseModal
+                ]
             )
 
         LayoutMsg layoutMsg ->
@@ -571,13 +647,13 @@ update msg model =
             )
 
 
-validateAmount : String -> Feedback
-validateAmount amount =
+validateAmount : Amount.Locale -> String -> Feedback
+validateAmount locale amount =
     if amount |> String.isEmpty then
         None
 
     else
-        case amount |> String.toFloat of
+        case amount |> Amount.fromString locale of
             Nothing ->
                 Error "Not a number."
 

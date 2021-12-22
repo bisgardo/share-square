@@ -2,7 +2,7 @@ port module Layout exposing (..)
 
 import Html exposing (Html, button, div, h5, text)
 import Html.Attributes exposing (class, disabled, tabindex, type_)
-import Html.Events exposing (onCheck, onInput)
+import Html.Events exposing (onCheck, onClick, onInput)
 import Json.Decode
 import Set exposing (Set)
 
@@ -52,23 +52,32 @@ row1 =
     List.singleton >> row
 
 
-modal : String -> String -> List (Html msg) -> Bool -> Html msg
-modal key title body disableSubmit =
+modal : String -> String -> List (Html msg) -> Bool -> Maybe msg -> Html msg
+modal key title body disableSubmit deleteMsg =
     div [ Html.Attributes.id key, class "modal fade", tabindex -1 ]
         [ div [ class "modal-dialog" ]
             [ div [ class "modal-content" ]
                 [ div [ class "modal-header" ]
-                    [ h5 [ class "modal-title" ]
-                        [ text title
-                        ]
-                    , button [ type_ "button", class "btn-close", data "bs-dismiss" "modal" ]
-                        []
+                    [ h5 [ class "modal-title" ] [ text title ]
+                    , button [ type_ "button", class "btn-close", data "bs-dismiss" "modal" ] []
                     ]
                 , div [ class "modal-body" ] body
-                , div [ class "modal-footer" ]
-                    [ button [ type_ "button", class "btn btn-secondary", data "bs-dismiss" "modal" ] [ text "Close" ]
-                    , button [ type_ "submit", class "btn btn-primary", disabled disableSubmit ] [ text "Save" ]
-                    ]
+                , let
+                    buttons =
+                        [ button [ type_ "button", class "btn btn-secondary", data "bs-dismiss" "modal" ] [ text "Close" ]
+                        , button [ type_ "submit", class "btn btn-primary", disabled disableSubmit ] [ text "Save" ]
+                        ]
+                  in
+                  case deleteMsg of
+                    Nothing ->
+                        div [ class "modal-footer" ]
+                            buttons
+
+                    Just msg ->
+                        div [ class "modal-footer justify-content-between" ] <|
+                            [ button [ type_ "button", class "btn btn-danger  me-auto", onClick msg ] [ text "Delete" ]
+                            ]
+                                ++ buttons
                 ]
             ]
         ]

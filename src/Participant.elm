@@ -141,10 +141,8 @@ viewCreateModal model =
                     )
     in
     Html.form
-        [ onSubmit CreateSubmit
-        ]
-        [ modal createModalId "Add participant" body disable
-        ]
+        [ onSubmit CreateSubmit ]
+        [ modal createModalId "Add participant" body disable Nothing ]
 
 
 subscriptions : Model -> Sub Msg

@@ -1,5 +1,6 @@
 module Payment exposing (..)
 
+import Amount exposing (Amount)
 import Browser.Dom as Dom
 import Dict exposing (Dict)
 import Expense exposing (Expense)
@@ -17,7 +18,6 @@ import Task
 import Util.JsonDecode as Decode
 import Util.List as List
 import Util.Number as Number
-import Util.String as String
 import Util.Update as Update
 
 
@@ -32,7 +32,7 @@ createModalOpenId =
 type alias Model =
     { create : Maybe CreateModel
     , payments : List Payment
-    , paymentBalance : Dict Int Float
+    , paymentBalance : Dict Int Amount
     , nextId : Int
     , donePayments : Set Int
     }
@@ -42,7 +42,7 @@ type alias Payment =
     { id : Int
     , payer : Int
     , receiver : Int
-    , amount : Float
+    , amount : Amount
     }
 
 
@@ -83,7 +83,7 @@ paymentDecoder =
         -- payer ID
         (Decode.field "p" Decode.int)
         -- amount
-        (Decode.field "a" Decode.float)
+        (Decode.field "a" Amount.decoder)
         -- receiver ID
         (Decode.field "r" Decode.int)
 
@@ -92,7 +92,7 @@ encodePayment : Payment -> Value
 encodePayment payment =
     [ ( "i", payment.id |> Encode.int )
     , ( "p", payment.payer |> Encode.int )
-    , ( "a", payment.amount |> Encode.float )
+    , ( "a", payment.amount |> Amount.encode )
     , ( "r", payment.receiver |> Encode.int )
     ]
         |> Encode.object
@@ -125,8 +125,8 @@ export model =
     }
 
 
-create : Int -> CreateModel -> Result String ( Payment, Bool )
-create id model =
+create : Amount.Locale -> Int -> CreateModel -> Result String ( Payment, Bool )
+create locale id model =
     -- Should probably run values though their validators...
     case model.payerId |> String.toInt of
         Nothing ->
@@ -142,7 +142,7 @@ create id model =
                         Err "payer ID must be different from receiver ID"
 
                     else
-                        case model.amount.value |> String.toFloat of
+                        case model.amount.value |> Amount.fromString locale of
                             Nothing ->
                                 Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
@@ -187,7 +187,7 @@ type alias CreateModel =
     { payerId : String
     , receiverId : String
     , amount : Validated Field
-    , suggestedAmount : Result ( Maybe Int, Maybe Int ) Float
+    , suggestedAmount : Result ( Maybe Int, Maybe Int ) Amount
     , done : Bool
     }
 
@@ -199,18 +199,18 @@ type Msg
     | CreateEditReceiver String
     | CreateEditAmount String
     | CreateSetDone Bool
-    | CreateApplySuggestedAmount Float
+    | CreateApplySuggestedAmount Amount
     | CreateSubmit
     | Delete Int
-    | ApplySuggestedPayment Int Int Float
-    | ApplyAllSuggestedPayments (Dict Int (List ( Int, Float )))
+    | ApplySuggestedPayment Int Int Amount
+    | ApplyAllSuggestedPayments (Dict Int (List ( Int, Amount )))
     | SetDone Int Bool
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
 
 
-view : Participant.Model -> Model -> List (Html Msg)
-view participantModel model =
+view : Amount.Locale -> Participant.Model -> Model -> List (Html Msg)
+view locale participantModel model =
     [ Html.table [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -236,7 +236,7 @@ view participantModel model =
                             [ Html.td [] [ Html.text id ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
-                            , Html.td [] [ Html.text (payment.amount |> String.fromAmount) ]
+                            , Html.td [] [ Html.text (payment.amount |> Amount.toString locale) ]
                             , Html.td []
                                 [ Html.input
                                     [ Html.Attributes.type_ "checkbox"
@@ -268,7 +268,7 @@ view participantModel model =
             )
         ]
     , viewCreateOpen participantModel
-    , viewCreateModal participantModel model
+    , viewCreateModal locale participantModel model
     ]
 
 
@@ -284,8 +284,8 @@ viewCreateOpen participantModel =
         ]
 
 
-viewCreateModal : Participant.Model -> Model -> Html Msg
-viewCreateModal participantModel model =
+viewCreateModal : Amount.Locale -> Participant.Model -> Model -> Html Msg
+viewCreateModal locale participantModel model =
     let
         ( body, disable ) =
             case model.create of
@@ -293,7 +293,7 @@ viewCreateModal participantModel model =
                     ( [ Html.text "Loading..." ], True )
 
                 Just createModel ->
-                    ( viewAdd participantModel createModel
+                    ( viewAdd locale participantModel createModel
                     , String.isEmpty createModel.amount.value
                         || createModel.payerId
                         == createModel.receiverId
@@ -302,11 +302,11 @@ viewCreateModal participantModel model =
     in
     Html.form
         [ Html.Events.onSubmit CreateSubmit ]
-        [ modal createModalId "Add payment" body disable ]
+        [ modal createModalId "Add payment" body disable Nothing ]
 
 
-viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
-viewAdd participantModel model =
+viewAdd : Amount.Locale -> Participant.Model -> CreateModel -> List (Html Msg)
+viewAdd locale participantModel model =
     let
         participantsFields =
             participantModel.participants
@@ -339,7 +339,7 @@ viewAdd participantModel model =
                     Ok amount ->
                         ( None
                         , None
-                        , if amount == (model.amount.value |> String.toFloat |> Maybe.withDefault 0) then
+                        , if amount == (model.amount.value |> Amount.fromString locale |> Maybe.withDefault 0) then
                             -- Amount is already the suggested value.
                             Nothing
 
@@ -375,7 +375,7 @@ viewAdd participantModel model =
                 Just amount ->
                     [ Layout.internalLink
                         (CreateApplySuggestedAmount amount)
-                        [ text <| "Balance difference: " ++ (amount |> String.fromAmount) ]
+                        [ text <| "Balance difference: " ++ (amount |> Amount.toString locale) ]
                     ]
         ]
     , textInput "Amount" model.amount CreateEditAmount
@@ -406,8 +406,8 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : Maybe (Dict Int Float) -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update balances msg model =
+update : Amount.Locale -> Maybe (Dict Int Amount) -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update locale balances msg model =
     case msg of
         LoadCreate participants ->
             let
@@ -463,7 +463,7 @@ update balances msg model =
               )
             , Cmd.none
             )
-                |> Update.chains (Update.withPairModel (update balances) (||))
+                |> Update.chains (Update.withPairModel (update locale balances) (||))
                     ((case firstNegativeBalanceParticipant |> Maybe.orElse firstParticipantFallback of
                         Nothing ->
                             []
@@ -545,7 +545,7 @@ update balances msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = Expense.validateAmount amount
+                                                , feedback = Expense.validateAmount locale amount
                                             }
                                     }
                                 )
@@ -565,17 +565,15 @@ update balances msg model =
                     createModel.amount.key |> Dom.focus |> Task.attempt DomMsg
             )
                 |> Update.chain
-                    (update balances)
-                    (amount |> String.fromAmount |> CreateEditAmount)
+                    (update locale balances)
+                    (amount |> Amount.toString locale |> CreateEditAmount)
 
         CreateSetDone done ->
             ( ( { model
                     | create =
                         model.create
                             |> Maybe.map
-                                (\createModel ->
-                                    { createModel | done = done }
-                                )
+                                (\createModel -> { createModel | done = done })
                 }
               , False
               )
@@ -590,7 +588,7 @@ update balances msg model =
                 result =
                     model.create
                         |> Result.fromMaybe "no create model found"
-                        |> Result.andThen (create id)
+                        |> Result.andThen (create locale id)
             in
             case result of
                 Err error ->
@@ -737,7 +735,7 @@ addPayments payments done nextId model =
     }
 
 
-findSuggestedPayment : Dict Int Float -> Maybe ( ( Int, Float ), ( Int, Float ) )
+findSuggestedPayment : Dict Int Amount -> Maybe ( ( Int, Amount ), ( Int, Amount ) )
 findSuggestedPayment =
     Dict.foldl
         (\participantId participantBalance result ->
@@ -758,7 +756,7 @@ findSuggestedPayment =
         Nothing
 
 
-autosuggestPayments : Dict Int Float -> Dict Int (List ( Int, Float ))
+autosuggestPayments : Dict Int Amount -> Dict Int (List ( Int, Amount ))
 autosuggestPayments totalBalances =
     case totalBalances |> autosuggestPayment of
         Nothing ->
@@ -775,7 +773,7 @@ autosuggestPayments totalBalances =
                     )
 
 
-autosuggestPayment : Dict Int Float -> Maybe ( Int, Int, Float )
+autosuggestPayment : Dict Int Amount -> Maybe ( Int, Int, Amount )
 autosuggestPayment =
     findSuggestedPayment
         >> Maybe.andThen
@@ -793,17 +791,17 @@ autosuggestPayment =
             )
 
 
-sumBalances : Int -> Dict Int Float -> Dict Int Float -> Float
+sumBalances : Int -> Dict Int Amount -> Dict Int Amount -> Amount
 sumBalances participantId paymentBalance balance =
     (balance |> lookupBalance participantId) + (paymentBalance |> lookupBalance participantId)
 
 
-lookupBalance : Int -> Dict Int Float -> Float
+lookupBalance : Int -> Dict Int Amount -> Amount
 lookupBalance participantId =
     Dict.get participantId >> Maybe.withDefault 0
 
 
-suggestPaymentAmount : String -> String -> Dict Int Float -> Dict Int Float -> Result ( Maybe Int, Maybe Int ) Float
+suggestPaymentAmount : String -> String -> Dict Int Amount -> Dict Int Amount -> Result ( Maybe Int, Maybe Int ) Amount
 suggestPaymentAmount payer receiver paymentBalance balance =
     let
         payerId =
@@ -839,11 +837,11 @@ suggestPaymentAmount payer receiver paymentBalance balance =
         Ok suggestedAmount
 
 
-updatePaymentBalances : Int -> Int -> Float -> Dict Int Float -> Dict Int Float
+updatePaymentBalances : Int -> Int -> Amount -> Dict Int Amount -> Dict Int Amount
 updatePaymentBalances payerId receiverId amount =
     updatePaymentBalance payerId amount >> updatePaymentBalance receiverId -amount
 
 
-updatePaymentBalance : Int -> Float -> Dict Int Float -> Dict Int Float
+updatePaymentBalance : Int -> Amount -> Dict Int Amount -> Dict Int Amount
 updatePaymentBalance participantId amount =
     Dict.update participantId (Maybe.withDefault 0 >> (+) amount >> Just)
