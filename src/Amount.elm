@@ -19,12 +19,14 @@ toDecimalPoint separator =
     if separator == "." then
         identity
 
-     else
+    else
         String.replace "." "!" >> String.replace separator "."
-        
+
+
 fromString : Locale -> String -> Maybe Amount
 fromString locale string =
-    string |> toDecimalPoint locale.decimalSeparator
+    string
+        |> toDecimalPoint locale.decimalSeparator
         |> String.toFloat
         |> Maybe.map ((*) (10.0 ^ toFloat locale.decimalPlaces) >> round)
 
