@@ -28,14 +28,26 @@ fromString locale string =
     string
         |> toDecimalPoint locale.decimalSeparator
         |> String.toFloat
-        |> Maybe.map ((*) (10.0 ^ toFloat locale.decimalPlaces) >> round)
+        |> Maybe.map ((*) (10 ^ toFloat locale.decimalPlaces) >> round)
 
 
 toString : Locale -> Amount -> String
-toString locale amount =
+toString =
+    toStringSigned ""
+
+
+toStringSigned : String -> Locale -> Amount -> String
+toStringSigned positiveSign locale amount =
     let
+        ( amountSign, prefix ) =
+            if amount < 0 then
+                ( -1, "-" )
+
+            else
+                ( 1, positiveSign )
+
         string =
-            amount |> String.fromInt |> String.padLeft (locale.decimalPlaces + 1) '0'
+            amount * amountSign |> String.fromInt |> String.padLeft (locale.decimalPlaces + 1) '0'
 
         right =
             string |> String.right locale.decimalPlaces
@@ -43,20 +55,7 @@ toString locale amount =
         left =
             string |> String.dropRight locale.decimalPlaces
     in
-    left ++ locale.decimalSeparator ++ right
-
-
-toStringSigned : Locale -> Amount -> String
-toStringSigned locale amount =
-    let
-        string =
-            toString locale amount
-    in
-    if amount > 0 then
-        "+" ++ string
-
-    else
-        string
+    prefix ++ left ++ locale.decimalSeparator ++ right
 
 
 decoder : Decoder Amount

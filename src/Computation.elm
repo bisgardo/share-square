@@ -132,7 +132,7 @@ viewBalances locale participants model =
                                                 "text-decoration-line-through"
                                         ]
                                         [ Html.td [] [ text participantName ]
-                                        , Html.td [] [ text (amount |> Amount.toStringSigned locale) ]
+                                        , Html.td [] [ text (amount |> Amount.toStringSigned "+" locale) ]
                                         , Html.td []
                                             (computed.suggestedPayments
                                                 |> Dict.get participantId
