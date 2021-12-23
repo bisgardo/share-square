@@ -14,6 +14,26 @@ type alias Locale =
     }
 
 
+localeDecoder : Decoder Locale
+localeDecoder =
+    Decode.map2
+        Locale
+        (Decode.field "p" Decode.int)
+        (Decode.field "s" Decode.string)
+
+
+encodeLocale : Locale -> Encode.Value
+encodeLocale locale =
+    [ ( "p", locale.decimalPlaces |> Encode.int )
+    , ( "s", locale.decimalSeparator |> Encode.string )
+    ]
+        |> Encode.object
+
+
+
+-- Consider if the conversion functions should be optimized (e.g. precomputing 10^decimal_places) or the results be cached...
+
+
 toDecimalPoint : String -> String -> String
 toDecimalPoint separator =
     if separator == "." then

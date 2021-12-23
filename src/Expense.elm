@@ -12,6 +12,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import List.Extra as List
+import Locale exposing (Locale)
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
 import Set exposing (Set)
@@ -135,7 +136,7 @@ import_ participants expenses model =
     }
 
 
-create : Amount.Locale -> Int -> CreateModel -> Result String Expense
+create : Locale -> Int -> CreateModel -> Result String Expense
 create locale id model =
     -- Should probably run values though their validators...
     let
@@ -148,7 +149,7 @@ create locale id model =
                     Ok payerId
 
         amountResult =
-            case model.amount.value |> Amount.fromString locale of
+            case model.amount.value |> Amount.fromString locale.amount of
                 Nothing ->
                     Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
@@ -217,7 +218,7 @@ initCreate payerId receiverIds =
     }
 
 
-view : Amount.Locale -> Model -> List (Html Msg)
+view : Locale -> Model -> List (Html Msg)
 view locale model =
     [ Html.table [ class "table" ]
         [ Html.thead []
@@ -276,7 +277,7 @@ view locale model =
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
                              , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
-                             , Html.td [] [ Html.text (expense.amount |> Amount.toString locale) ]
+                             , Html.td [] [ Html.text (expense.amount |> Amount.toString locale.amount) ]
                              , Html.td [] [ Html.text expense.description ]
                              ]
                                 ++ List.map
@@ -400,7 +401,7 @@ subscriptions model =
         |> Sub.batch
 
 
-update : Amount.Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update : Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update locale msg model =
     case msg of
         LoadCreate editId ->
@@ -447,7 +448,7 @@ update locale msg model =
                                         { newCreateModel
                                             | description =
                                                 { descriptionField | value = expense.description }
-                                            , amount = { amountField | value = expense.amount |> Amount.toString locale }
+                                            , amount = { amountField | value = expense.amount |> Amount.toString locale.amount }
                                             , editId = editId
                                         }
             in
@@ -547,7 +548,7 @@ update locale msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = validateAmount locale amount
+                                                , feedback = validateAmount locale.amount    amount
                                             }
                                     }
                                 )

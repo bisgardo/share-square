@@ -12,6 +12,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import LocalStorage exposing (Revision)
+import Locale exposing (Locale)
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
 import Payment exposing (Payment)
@@ -50,13 +51,16 @@ storageUrlLocal =
 
 {-| To be expanded to include display strings.
 -}
-defaultLocale : Amount.Locale
+defaultLocale : Locale
 defaultLocale =
-    --{ decimalPlaces = 3
-    --, decimalSeparator = ","
-    --}
-    { decimalPlaces = 2
-    , decimalSeparator = "."
+    -- TODO Add triviality limit.
+    { amount =
+        --{ decimalPlaces = 3
+        --, decimalSeparator = ","
+        --}
+        { decimalPlaces = 2
+        , decimalSeparator = "."
+        }
     }
 
 
@@ -68,7 +72,7 @@ type alias Flags =
 type alias Model =
     { environment : String
     , key : Browser.Navigation.Key
-    , locale : Amount.Locale
+    , locale : Locale
     , expense : Expense.Model
     , computation : Computation.Model
     , storageMode : Storage.Mode
@@ -100,6 +104,7 @@ type alias StorageValues =
     { participants : List Participant
     , expenses : List Expense
     , payments : Payment.StorageValues
+    , locale : Locale
     }
 
 
@@ -123,7 +128,7 @@ modeParser =
 
 storageValuesDecoder : Decoder StorageValues
 storageValuesDecoder =
-    Decode.map3
+    Decode.map4
         StorageValues
         -- participants
         (Decode.field "p" <| Decode.nullableList Participant.decoder)
@@ -131,6 +136,8 @@ storageValuesDecoder =
         (Decode.field "e" <| Decode.nullableList Expense.decoder)
         -- payments
         (Decode.field "y" <| Payment.decoder)
+        -- locale
+        (Decode.field "l" <| Locale.decoder)
 
 
 encodeStorageValues : StorageValues -> String
@@ -138,6 +145,7 @@ encodeStorageValues values =
     [ ( "p", values.participants |> Encode.list Participant.encode )
     , ( "e", values.expenses |> Encode.list Expense.encode )
     , ( "y", values.payments |> Payment.encode )
+    , ( "l", values.locale |> Locale.encode )
     ]
         |> Encode.object
         |> Encode.encode 0
@@ -588,4 +596,5 @@ export model =
     { participants = model.expense.participant.participants
     , expenses = model.expense.expenses
     , payments = Payment.export model.computation.payment
+    , locale = model.locale
     }
