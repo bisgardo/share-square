@@ -8,7 +8,7 @@ import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Layout
-import Locale exposing (Locale)
+import Config exposing (Config)
 import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
 import Payment
@@ -57,18 +57,18 @@ type Msg
     | PaymentMsg Payment.Msg
 
 
-view : Locale -> Participant.Model -> Model -> Html Msg
-view locale participantModel model =
+view : Config -> Participant.Model -> Model -> Html Msg
+view config participantModel model =
     div [ Html.Attributes.class "col" ] <|
         [ Html.h3 [] [ text "Balances" ]
-        , viewBalances locale participantModel.idToName model
+        , viewBalances config participantModel.idToName model
         , Html.h3 [] [ text "Payments" ]
         ]
-            ++ (Payment.view locale.amount participantModel model.payment |> List.map (Html.map PaymentMsg))
+            ++ (Payment.view config participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
-viewBalances : Locale -> Dict Int String -> Model -> Html Msg
-viewBalances locale participants model =
+viewBalances : Config -> Dict Int String -> Model -> Html Msg
+viewBalances config participants model =
     Html.table [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -133,7 +133,7 @@ viewBalances locale participants model =
                                                 "text-decoration-line-through"
                                         ]
                                         [ Html.td [] [ text participantName ]
-                                        , Html.td [] [ text (amount |> Amount.toStringSigned "+" locale.amount) ]
+                                        , Html.td [] [ text (amount |> Amount.toStringSigned "+" config.amount) ]
                                         , Html.td []
                                             (computed.suggestedPayments
                                                 |> Dict.get participantId
@@ -159,7 +159,7 @@ viewBalances locale participants model =
                                                                         )
                                                                         [ Html.text <|
                                                                             "Pay "
-                                                                                ++ Amount.toString locale.amount suggestedAmount
+                                                                                ++ Amount.toString config.amount suggestedAmount
                                                                                 ++ " to "
                                                                                 ++ receiverName
                                                                         ]
@@ -249,8 +249,8 @@ subscriptions =
     .payment >> Payment.subscriptions >> Sub.map PaymentMsg
 
 
-update : Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update locale msg model =
+update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config msg model =
     case msg of
         Disable ->
             ( ( { model | computed = Nothing }, False ), Cmd.none )
@@ -297,7 +297,7 @@ update locale msg model =
         PaymentMsg paymentMsg ->
             let
                 ( ( paymentModel, modelChanged ), paymentCmd ) =
-                    model.payment |> Payment.update locale.amount (model.computed |> Maybe.map .balance) paymentMsg
+                    model.payment |> Payment.update config (model.computed |> Maybe.map .balance) paymentMsg
             in
             ( ( { model
                     | payment = paymentModel

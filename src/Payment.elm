@@ -2,6 +2,7 @@ module Payment exposing (..)
 
 import Amount exposing (Amount)
 import Browser.Dom as Dom
+import Config exposing (Config)
 import Dict exposing (Dict)
 import Expense exposing (Expense)
 import Html exposing (Html, div, text)
@@ -124,8 +125,8 @@ export model =
     }
 
 
-create : Amount.Locale -> Int -> CreateModel -> Result String ( Payment, Bool )
-create locale id model =
+create : Config -> Int -> CreateModel -> Result String ( Payment, Bool )
+create config id model =
     -- Should probably run values though their validators...
     case model.payerId |> String.toInt of
         Nothing ->
@@ -141,7 +142,7 @@ create locale id model =
                         Err "payer ID must be different from receiver ID"
 
                     else
-                        case model.amount.value |> Amount.fromString locale of
+                        case model.amount.value |> Amount.fromString config.amount of
                             Nothing ->
                                 Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
@@ -208,8 +209,8 @@ type Msg
     | DomMsg (Result Dom.Error ())
 
 
-view : Amount.Locale -> Participant.Model -> Model -> List (Html Msg)
-view locale participantModel model =
+view : Config -> Participant.Model -> Model -> List (Html Msg)
+view config participantModel model =
     [ Html.table [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -235,7 +236,7 @@ view locale participantModel model =
                             [ Html.td [] [ Html.text id ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
-                            , Html.td [] [ Html.text (payment.amount |> Amount.toString locale) ]
+                            , Html.td [] [ Html.text (payment.amount |> Amount.toString config.amount) ]
                             , Html.td []
                                 [ Html.input
                                     [ Html.Attributes.type_ "checkbox"
@@ -267,7 +268,7 @@ view locale participantModel model =
             )
         ]
     , viewCreateOpen participantModel
-    , viewCreateModal locale participantModel model
+    , viewCreateModal config participantModel model
     ]
 
 
@@ -283,8 +284,8 @@ viewCreateOpen participantModel =
         ]
 
 
-viewCreateModal : Amount.Locale -> Participant.Model -> Model -> Html Msg
-viewCreateModal locale participantModel model =
+viewCreateModal : Config -> Participant.Model -> Model -> Html Msg
+viewCreateModal config participantModel model =
     let
         ( body, disable ) =
             case model.create of
@@ -292,7 +293,7 @@ viewCreateModal locale participantModel model =
                     ( [ Html.text "Loading..." ], True )
 
                 Just createModel ->
-                    ( viewAdd locale participantModel createModel
+                    ( viewAdd config participantModel createModel
                     , String.isEmpty createModel.amount.value
                         || createModel.payerId
                         == createModel.receiverId
@@ -304,8 +305,8 @@ viewCreateModal locale participantModel model =
         [ modal createModalId "Add payment" body disable Nothing ]
 
 
-viewAdd : Amount.Locale -> Participant.Model -> CreateModel -> List (Html Msg)
-viewAdd locale participantModel model =
+viewAdd : Config -> Participant.Model -> CreateModel -> List (Html Msg)
+viewAdd config participantModel model =
     let
         participantsFields =
             participantModel.participants
@@ -338,7 +339,7 @@ viewAdd locale participantModel model =
                     Ok amount ->
                         ( None
                         , None
-                        , if amount == (model.amount.value |> Amount.fromString locale |> Maybe.withDefault 0) then
+                        , if amount == (model.amount.value |> Amount.fromString config.amount |> Maybe.withDefault 0) then
                             -- Amount is already the suggested value.
                             Nothing
 
@@ -374,7 +375,7 @@ viewAdd locale participantModel model =
                 Just amount ->
                     [ Layout.internalLink
                         (CreateApplySuggestedAmount amount)
-                        [ text <| "Balance difference: " ++ (amount |> Amount.toString locale) ]
+                        [ text <| "Balance difference: " ++ (amount |> Amount.toString config.amount) ]
                     ]
         ]
     , textInput "Amount" model.amount CreateEditAmount
@@ -405,8 +406,8 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : Amount.Locale -> Maybe (Dict Int Amount) -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update locale balances msg model =
+update : Config -> Maybe (Dict Int Amount) -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config balances msg model =
     case msg of
         LoadCreate participants ->
             let
@@ -468,7 +469,7 @@ update locale balances msg model =
               )
             , Cmd.none
             )
-                |> Update.chains (Update.withPairModel (update locale balances) (||))
+                |> Update.chains (Update.withPairModel (update config balances) (||))
                     ((case firstNegativeBalanceParticipant |> Maybe.orElse firstParticipantFallback of
                         Nothing ->
                             []
@@ -550,7 +551,7 @@ update locale balances msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = Expense.validateAmount locale amount
+                                                , feedback = Expense.validateAmount config.amount amount
                                             }
                                     }
                                 )
@@ -570,8 +571,8 @@ update locale balances msg model =
                     createModel.amount.key |> Dom.focus |> Task.attempt DomMsg
             )
                 |> Update.chain
-                    (update locale balances)
-                    (amount |> Amount.toString locale |> CreateEditAmount)
+                    (update config balances)
+                    (amount |> Amount.toString config.amount |> CreateEditAmount)
 
         CreateSetDone done ->
             ( ( { model
@@ -593,7 +594,7 @@ update locale balances msg model =
                 result =
                     model.create
                         |> Result.fromMaybe "no create model found"
-                        |> Result.andThen (create locale id)
+                        |> Result.andThen (create config id)
             in
             case result of
                 Err error ->

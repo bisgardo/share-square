@@ -2,6 +2,7 @@ module Expense exposing (..)
 
 import Amount exposing (Amount)
 import Browser.Dom as Dom
+import Config exposing (Config)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Html exposing (Html)
@@ -12,7 +13,6 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import List.Extra as List
-import Locale exposing (Locale)
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
 import Set exposing (Set)
@@ -136,8 +136,8 @@ import_ participants expenses model =
     }
 
 
-create : Locale -> Int -> CreateModel -> Result String Expense
-create locale id model =
+create : Config -> Int -> CreateModel -> Result String Expense
+create config id model =
     -- Should probably run values though their validators...
     let
         payerResult =
@@ -149,7 +149,7 @@ create locale id model =
                     Ok payerId
 
         amountResult =
-            case model.amount.value |> Amount.fromString locale.amount of
+            case model.amount.value |> Amount.fromString config.amount of
                 Nothing ->
                     Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
@@ -218,8 +218,8 @@ initCreate payerId receiverIds =
     }
 
 
-view : Locale -> Model -> List (Html Msg)
-view locale model =
+view : Config -> Model -> List (Html Msg)
+view config model =
     [ Html.table [ class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -277,7 +277,7 @@ view locale model =
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
                              , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
-                             , Html.td [] [ Html.text (expense.amount |> Amount.toString locale.amount) ]
+                             , Html.td [] [ Html.text (expense.amount |> Amount.toString config.amount) ]
                              , Html.td [] [ Html.text expense.description ]
                              ]
                                 ++ List.map
@@ -401,8 +401,8 @@ subscriptions model =
         |> Sub.batch
 
 
-update : Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update locale msg model =
+update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config msg model =
     case msg of
         LoadCreate editId ->
             let
@@ -448,7 +448,7 @@ update locale msg model =
                                         { newCreateModel
                                             | description =
                                                 { descriptionField | value = expense.description }
-                                            , amount = { amountField | value = expense.amount |> Amount.toString locale.amount }
+                                            , amount = { amountField | value = expense.amount |> Amount.toString config.amount }
                                             , editId = editId
                                         }
             in
@@ -473,7 +473,7 @@ update locale msg model =
                         Nothing ->
                             let
                                 expense =
-                                    createModel |> create locale model.nextId
+                                    createModel |> create config model.nextId
                             in
                             case expense of
                                 Err error ->
@@ -497,7 +497,7 @@ update locale msg model =
                         Just editId ->
                             let
                                 expense =
-                                    createModel |> create locale editId
+                                    createModel |> create config editId
                             in
                             case expense of
                                 Err error ->
@@ -548,7 +548,7 @@ update locale msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = validateAmount locale.amount    amount
+                                                , feedback = validateAmount config.amount amount
                                             }
                                     }
                                 )

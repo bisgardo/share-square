@@ -12,7 +12,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import LocalStorage exposing (Revision)
-import Locale exposing (Locale)
+import Config exposing (Config)
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
 import Payment exposing (Payment)
@@ -51,8 +51,8 @@ storageUrlLocal =
 
 {-| To be expanded to include display strings.
 -}
-defaultLocale : Locale
-defaultLocale =
+defaultConfig : Config
+defaultConfig =
     -- TODO Add triviality limit.
     { amount =
         --{ decimalPlaces = 3
@@ -72,7 +72,7 @@ type alias Flags =
 type alias Model =
     { environment : String
     , key : Browser.Navigation.Key
-    , locale : Locale
+    , config : Config
     , expense : Expense.Model
     , computation : Computation.Model
     , storageMode : Storage.Mode
@@ -104,7 +104,7 @@ type alias StorageValues =
     { participants : List Participant
     , expenses : List Expense
     , payments : Payment.StorageValues
-    , locale : Locale
+    , config : Config
     }
 
 
@@ -136,8 +136,8 @@ storageValuesDecoder =
         (Decode.field "e" <| Decode.nullableList Expense.decoder)
         -- payments
         (Decode.field "y" <| Payment.decoder)
-        -- locale
-        (Decode.field "l" <| Locale.decoder)
+        -- config
+        (Decode.field "c" <| Config.decoder)
 
 
 encodeStorageValues : StorageValues -> String
@@ -145,7 +145,7 @@ encodeStorageValues values =
     [ ( "p", values.participants |> Encode.list Participant.encode )
     , ( "e", values.expenses |> Encode.list Expense.encode )
     , ( "y", values.payments |> Payment.encode )
-    , ( "l", values.locale |> Locale.encode )
+    , ( "c", values.config |> Config.encode )
     ]
         |> Encode.object
         |> Encode.encode 0
@@ -196,7 +196,7 @@ init flags url key =
     in
     ( { environment = flags.environment
       , key = key
-      , locale = defaultLocale
+      , config = defaultConfig
       , expense = expenseModel
       , computation = computationModel
       , storageMode = storageMode
@@ -455,14 +455,14 @@ viewContent model =
 viewExpenses : Model -> List (Html Msg)
 viewExpenses model =
     model.expense
-        |> Expense.view model.locale
+        |> Expense.view model.config
         |> List.map (Html.map ExpenseMsg)
 
 
 viewComputation : Model -> List (Html Msg)
 viewComputation model =
     model.computation
-        |> Computation.view model.locale model.expense.participant
+        |> Computation.view model.config model.expense.participant
         |> Html.map ComputationMsg
         |> List.singleton
 
@@ -473,12 +473,12 @@ update msg model =
         ExpenseMsg expenseMsg ->
             let
                 ( ( expenseModel, expenseModelChanged ), expensesCmd ) =
-                    model.expense |> Expense.update model.locale expenseMsg
+                    model.expense |> Expense.update model.config expenseMsg
 
                 ( ( computationModel, computationModelChanged ), computationCmd ) =
                     if expenseModelChanged then
                         model.computation
-                            |> Computation.update model.locale Computation.Disable
+                            |> Computation.update model.config Computation.Disable
 
                     else
                         ( ( model.computation, False ), Cmd.none )
@@ -501,7 +501,7 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Computation.update model.locale computationMsg
+                    model.computation |> Computation.update model.config computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch
@@ -596,5 +596,5 @@ export model =
     { participants = model.expense.participant.participants
     , expenses = model.expense.expenses
     , payments = Payment.export model.computation.payment
-    , locale = model.locale
+    , config = model.config
     }
