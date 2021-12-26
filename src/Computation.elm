@@ -1,6 +1,7 @@
 module Computation exposing (..)
 
 import Amount exposing (Amount)
+import Config exposing (Config)
 import Dict exposing (Dict)
 import Expense exposing (Expense)
 import Html exposing (Html, div, text)
@@ -8,7 +9,6 @@ import Html.Attributes
 import Html.Events
 import Html.Keyed
 import Layout
-import Config exposing (Config)
 import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
 import Payment

@@ -4,6 +4,7 @@ import Amount
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Computation
+import Config exposing (Config)
 import Expense exposing (Expense)
 import Html exposing (Html)
 import Html.Attributes
@@ -12,7 +13,6 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import LocalStorage exposing (Revision)
-import Config exposing (Config)
 import Maybe.Extra as Maybe
 import Participant exposing (Participant)
 import Payment exposing (Payment)
@@ -588,6 +588,7 @@ import_ revision values model =
             model.computation
                 |> Computation.import_ values.payments
         , storageRevision = revision
+        , config = values.config
     }
 
 

@@ -15,7 +15,8 @@ decoder =
     Decode.map
         Config
         (Decode.field "a" <| Amount.localeDecoder)
-        
+
+
 encode : Config -> Encode.Value
 encode values =
     [ ( "a", values.amount |> Amount.encodeLocale )
