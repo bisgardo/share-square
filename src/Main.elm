@@ -49,21 +49,6 @@ storageUrlLocal =
     "local"
 
 
-{-| To be expanded to include display strings.
--}
-defaultConfig : Config
-defaultConfig =
-    -- TODO Add triviality limit.
-    { amount =
-        --{ decimalPlaces = 3
-        --, decimalSeparator = ","
-        --}
-        { decimalPlaces = 2
-        , decimalSeparator = "."
-        }
-    }
-
-
 type alias Flags =
     { environment : String
     }
@@ -100,11 +85,16 @@ type StorageWriteError
     = RevisionMismatch Revision Revision
 
 
+type alias StorageConfig =
+    { decimalPlaces : Int
+    }
+
+
 type alias StorageValues =
     { participants : List Participant
     , expenses : List Expense
     , payments : Payment.StorageValues
-    , config : Config
+    , config : StorageConfig
     }
 
 
@@ -126,6 +116,20 @@ modeParser =
             )
 
 
+storageConfigDecoder : Decoder StorageConfig
+storageConfigDecoder =
+    Decode.map
+        StorageConfig
+        -- decimal places (in amount values)
+        (Decode.field "p" <| Decode.int)
+
+
+encodeStorageConfig : StorageConfig -> Value
+encodeStorageConfig values =
+    [ ( "p", values.decimalPlaces |> Encode.int ) ]
+        |> Encode.object
+
+
 storageValuesDecoder : Decoder StorageValues
 storageValuesDecoder =
     Decode.map4
@@ -137,18 +141,17 @@ storageValuesDecoder =
         -- payments
         (Decode.field "y" <| Payment.decoder)
         -- config
-        (Decode.field "c" <| Config.decoder)
+        (Decode.field "c" <| storageConfigDecoder)
 
 
-encodeStorageValues : StorageValues -> String
+encodeStorageValues : StorageValues -> Value
 encodeStorageValues values =
     [ ( "p", values.participants |> Encode.list Participant.encode )
     , ( "e", values.expenses |> Encode.list Expense.encode )
     , ( "y", values.payments |> Payment.encode )
-    , ( "c", values.config |> Config.encode )
+    , ( "c", values.config |> encodeStorageConfig )
     ]
         |> Encode.object
-        |> Encode.encode 0
 
 
 type SyncDirection
@@ -196,7 +199,7 @@ init flags url key =
     in
     ( { environment = flags.environment
       , key = key
-      , config = defaultConfig
+      , config = Config.default
       , expense = expenseModel
       , computation = computationModel
       , storageMode = storageMode
@@ -562,13 +565,13 @@ update msg model =
             , case direction of
                 FromStorage ->
                     model.storageMode
-                        |> Storage.loadValues storageDataKey
+                        |> Storage.loadValue storageDataKey
 
                 ToStorage ->
                     model.storageMode
                         |> Storage.storeValue storageDataKey
                             model.storageRevision
-                            (schemaVersion ++ schemaVersionSplitter ++ (model |> export |> encodeStorageValues))
+                            (schemaVersion ++ schemaVersionSplitter ++ (model |> export |> encodeStorageValues |> Encode.encode 0))
             )
 
         UrlRequested _ ->
@@ -588,7 +591,17 @@ import_ revision values model =
             model.computation
                 |> Computation.import_ values.payments
         , storageRevision = revision
-        , config = values.config
+        , config =
+            let
+                config =
+                    model.config
+            in
+            { config
+                | amount =
+                    { decimalPlaces = values.config.decimalPlaces
+                    , decimalSeparator = Config.defaultDecimalSeparator
+                    }
+            }
     }
 
 
@@ -597,5 +610,5 @@ export model =
     { participants = model.expense.participant.participants
     , expenses = model.expense.expenses
     , payments = Payment.export model.computation.payment
-    , config = model.config
+    , config = { decimalPlaces = model.config.amount.decimalPlaces }
     }

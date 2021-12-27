@@ -1,24 +1,27 @@
 module Config exposing (..)
 
 import Amount
-import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode
 
 
 type alias Config =
-    { amount : Amount.Locale
+    { amount : Amount.Config
     }
 
 
-decoder : Decoder Config
-decoder =
-    Decode.map
-        Config
-        (Decode.field "a" <| Amount.localeDecoder)
+defaultDecimalSeparator =
+    "."
 
 
-encode : Config -> Encode.Value
-encode values =
-    [ ( "a", values.amount |> Amount.encodeLocale )
-    ]
-        |> Encode.object
+{-| To be expanded to include display strings.
+-}
+default : Config
+default =
+    -- TODO Add triviality limit (no payments with amounts lower than this will be suggested and amounts will be rendered as "~0.00").
+    { amount =
+        --{ decimalPlaces = 3
+        --, decimalSeparator = ","
+        --}
+        { decimalPlaces = 2
+        , decimalSeparator = defaultDecimalSeparator
+        }
+    }

@@ -648,7 +648,7 @@ update config msg model =
             )
 
 
-validateAmount : Amount.Locale -> String -> Feedback
+validateAmount : Amount.Config -> String -> Feedback
 validateAmount locale amount =
     if amount |> String.isEmpty then
         None
@@ -658,8 +658,15 @@ validateAmount locale amount =
             Nothing ->
                 Error "Not a number."
 
-            Just _ ->
-                None
+            Just value ->
+                if value < 0 then
+                    Error "Number is negative."
+
+                else if value > Amount.max then
+                    Error "Number is too large."
+
+                else
+                    None
 
 
 validateDescription : String -> Feedback
