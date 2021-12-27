@@ -36,8 +36,8 @@ valueStored handler =
 
 {-| Send request to load value with the provided ID from storage.
 -}
-loadValues : String -> Mode -> Cmd msg
-loadValues id mode =
+loadValue : String -> Mode -> Cmd msg
+loadValue id mode =
     case mode of
         None ->
             Cmd.none

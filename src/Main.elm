@@ -4,6 +4,7 @@ import Amount
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Computation
+import Config exposing (Config)
 import Expense exposing (Expense)
 import Html exposing (Html)
 import Html.Attributes
@@ -48,18 +49,6 @@ storageUrlLocal =
     "local"
 
 
-{-| To be expanded to include display strings.
--}
-defaultLocale : Amount.Locale
-defaultLocale =
-    --{ decimalPlaces = 3
-    --, decimalSeparator = ","
-    --}
-    { decimalPlaces = 2
-    , decimalSeparator = "."
-    }
-
-
 type alias Flags =
     { environment : String
     }
@@ -68,7 +57,7 @@ type alias Flags =
 type alias Model =
     { environment : String
     , key : Browser.Navigation.Key
-    , locale : Amount.Locale
+    , config : Config
     , expense : Expense.Model
     , computation : Computation.Model
     , storageMode : Storage.Mode
@@ -96,10 +85,16 @@ type StorageWriteError
     = RevisionMismatch Revision Revision
 
 
+type alias StorageConfig =
+    { decimalPlaces : Int
+    }
+
+
 type alias StorageValues =
     { participants : List Participant
     , expenses : List Expense
     , payments : Payment.StorageValues
+    , config : StorageConfig
     }
 
 
@@ -121,9 +116,23 @@ modeParser =
             )
 
 
+storageConfigDecoder : Decoder StorageConfig
+storageConfigDecoder =
+    Decode.map
+        StorageConfig
+        -- decimal places (in amount values)
+        (Decode.field "p" <| Decode.int)
+
+
+encodeStorageConfig : StorageConfig -> Value
+encodeStorageConfig values =
+    [ ( "p", values.decimalPlaces |> Encode.int ) ]
+        |> Encode.object
+
+
 storageValuesDecoder : Decoder StorageValues
 storageValuesDecoder =
-    Decode.map3
+    Decode.map4
         StorageValues
         -- participants
         (Decode.field "p" <| Decode.nullableList Participant.decoder)
@@ -131,16 +140,18 @@ storageValuesDecoder =
         (Decode.field "e" <| Decode.nullableList Expense.decoder)
         -- payments
         (Decode.field "y" <| Payment.decoder)
+        -- config
+        (Decode.field "c" <| storageConfigDecoder)
 
 
-encodeStorageValues : StorageValues -> String
+encodeStorageValues : StorageValues -> Value
 encodeStorageValues values =
     [ ( "p", values.participants |> Encode.list Participant.encode )
     , ( "e", values.expenses |> Encode.list Expense.encode )
     , ( "y", values.payments |> Payment.encode )
+    , ( "c", values.config |> encodeStorageConfig )
     ]
         |> Encode.object
-        |> Encode.encode 0
 
 
 type SyncDirection
@@ -188,7 +199,7 @@ init flags url key =
     in
     ( { environment = flags.environment
       , key = key
-      , locale = defaultLocale
+      , config = Config.default
       , expense = expenseModel
       , computation = computationModel
       , storageMode = storageMode
@@ -447,14 +458,14 @@ viewContent model =
 viewExpenses : Model -> List (Html Msg)
 viewExpenses model =
     model.expense
-        |> Expense.view model.locale
+        |> Expense.view model.config
         |> List.map (Html.map ExpenseMsg)
 
 
 viewComputation : Model -> List (Html Msg)
 viewComputation model =
     model.computation
-        |> Computation.view model.locale model.expense.participant
+        |> Computation.view model.config model.expense.participant
         |> Html.map ComputationMsg
         |> List.singleton
 
@@ -465,12 +476,12 @@ update msg model =
         ExpenseMsg expenseMsg ->
             let
                 ( ( expenseModel, expenseModelChanged ), expensesCmd ) =
-                    model.expense |> Expense.update model.locale expenseMsg
+                    model.expense |> Expense.update model.config expenseMsg
 
                 ( ( computationModel, computationModelChanged ), computationCmd ) =
                     if expenseModelChanged then
                         model.computation
-                            |> Computation.update model.locale Computation.Disable
+                            |> Computation.update model.config Computation.Disable
 
                     else
                         ( ( model.computation, False ), Cmd.none )
@@ -493,7 +504,7 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Computation.update model.locale computationMsg
+                    model.computation |> Computation.update model.config computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch
@@ -554,13 +565,13 @@ update msg model =
             , case direction of
                 FromStorage ->
                     model.storageMode
-                        |> Storage.loadValues storageDataKey
+                        |> Storage.loadValue storageDataKey
 
                 ToStorage ->
                     model.storageMode
                         |> Storage.storeValue storageDataKey
                             model.storageRevision
-                            (schemaVersion ++ schemaVersionSplitter ++ (model |> export |> encodeStorageValues))
+                            (schemaVersion ++ schemaVersionSplitter ++ (model |> export |> encodeStorageValues |> Encode.encode 0))
             )
 
         UrlRequested _ ->
@@ -580,6 +591,17 @@ import_ revision values model =
             model.computation
                 |> Computation.import_ values.payments
         , storageRevision = revision
+        , config =
+            let
+                config =
+                    model.config
+            in
+            { config
+                | amount =
+                    { decimalPlaces = values.config.decimalPlaces
+                    , decimalSeparator = Config.defaultDecimalSeparator
+                    }
+            }
     }
 
 
@@ -588,4 +610,5 @@ export model =
     { participants = model.expense.participant.participants
     , expenses = model.expense.expenses
     , payments = Payment.export model.computation.payment
+    , config = { decimalPlaces = model.config.amount.decimalPlaces }
     }

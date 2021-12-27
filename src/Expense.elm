@@ -2,6 +2,7 @@ module Expense exposing (..)
 
 import Amount exposing (Amount)
 import Browser.Dom as Dom
+import Config exposing (Config)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Html exposing (Html)
@@ -135,8 +136,8 @@ import_ participants expenses model =
     }
 
 
-create : Amount.Locale -> Int -> CreateModel -> Result String Expense
-create locale id model =
+create : Config -> Int -> CreateModel -> Result String Expense
+create config id model =
     -- Should probably run values though their validators...
     let
         payerResult =
@@ -148,7 +149,7 @@ create locale id model =
                     Ok payerId
 
         amountResult =
-            case model.amount.value |> Amount.fromString locale of
+            case model.amount.value |> Amount.fromString config.amount of
                 Nothing ->
                     Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
@@ -217,8 +218,8 @@ initCreate payerId receiverIds =
     }
 
 
-view : Amount.Locale -> Model -> List (Html Msg)
-view locale model =
+view : Config -> Model -> List (Html Msg)
+view config model =
     [ Html.table [ class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -276,7 +277,7 @@ view locale model =
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
                              , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
-                             , Html.td [] [ Html.text (expense.amount |> Amount.toString locale) ]
+                             , Html.td [] [ Html.text (expense.amount |> Amount.toString config.amount) ]
                              , Html.td [] [ Html.text expense.description ]
                              ]
                                 ++ List.map
@@ -400,8 +401,8 @@ subscriptions model =
         |> Sub.batch
 
 
-update : Amount.Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update locale msg model =
+update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config msg model =
     case msg of
         LoadCreate editId ->
             let
@@ -447,7 +448,7 @@ update locale msg model =
                                         { newCreateModel
                                             | description =
                                                 { descriptionField | value = expense.description }
-                                            , amount = { amountField | value = expense.amount |> Amount.toString locale }
+                                            , amount = { amountField | value = expense.amount |> Amount.toString config.amount }
                                             , editId = editId
                                         }
             in
@@ -472,7 +473,7 @@ update locale msg model =
                         Nothing ->
                             let
                                 expense =
-                                    createModel |> create locale model.nextId
+                                    createModel |> create config model.nextId
                             in
                             case expense of
                                 Err error ->
@@ -496,7 +497,7 @@ update locale msg model =
                         Just editId ->
                             let
                                 expense =
-                                    createModel |> create locale editId
+                                    createModel |> create config editId
                             in
                             case expense of
                                 Err error ->
@@ -547,7 +548,7 @@ update locale msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = validateAmount locale amount
+                                                , feedback = validateAmount config.amount amount
                                             }
                                     }
                                 )
@@ -647,7 +648,7 @@ update locale msg model =
             )
 
 
-validateAmount : Amount.Locale -> String -> Feedback
+validateAmount : Amount.Config -> String -> Feedback
 validateAmount locale amount =
     if amount |> String.isEmpty then
         None
@@ -657,8 +658,15 @@ validateAmount locale amount =
             Nothing ->
                 Error "Not a number."
 
-            Just _ ->
-                None
+            Just value ->
+                if value < 0 then
+                    Error "Number is negative."
+
+                else if value > Amount.max then
+                    Error "Number is too large."
+
+                else
+                    None
 
 
 validateDescription : String -> Feedback
