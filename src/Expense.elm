@@ -220,7 +220,8 @@ initCreate payerId receiverIds =
 
 view : Config -> Model -> List (Html Msg)
 view config model =
-    [ Html.table [ class "table" ]
+    [ viewInstructions
+    , Html.table [ class "table" ]
         [ Html.thead []
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
@@ -323,6 +324,32 @@ view config model =
     , Participant.viewCreateModal model.participant |> Html.map ParticipantMsg
     , viewCreateModal model
     ]
+
+
+viewInstructions : Html msg
+viewInstructions =
+    infoBox
+        [ Html.p []
+            [ Html.text "Submitted expenses are listed in the table below. An expense has a "
+            , Html.em [] [ Html.text "payer" ]
+            , Html.text " and one or more receiving "
+            , Html.em [] [ Html.text "participants" ]
+            , Html.text " between whom the expense is to be shared equally."
+            ]
+        , Html.p []
+            [ Html.text "Before submitting expenses, the relevant participants (all payers and receivers) must be added using the "
+            , Html.i [ class "bi bi-file-plus" ] []
+            , Html.text " button in the top right part of the table."
+            ]
+        , Html.p []
+            [ Html.text "With participants defined, expenses may be added using the big blue button below the table."
+            ]
+        , Html.p []
+            [ Html.text "The submitted expenses are balanced amongst all the participants on the "
+            , Html.em [] [ Html.text "Settlement" ]
+            , Html.text " page."
+            ]
+        ]
 
 
 viewCreateOpen : Model -> Html Msg

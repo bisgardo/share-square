@@ -52,6 +52,11 @@ row1 =
     List.singleton >> row
 
 
+infoBox : List (Html msg) -> Html msg
+infoBox body =
+    div [ class "alert alert-light", Html.Attributes.attribute "role" "alert" ] body
+
+
 modal : String -> String -> List (Html msg) -> Bool -> Maybe msg -> Html msg
 modal key title body disableSubmit deleteMsg =
     div [ Html.Attributes.id key, class "modal fade", tabindex -1 ]

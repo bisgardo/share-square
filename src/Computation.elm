@@ -61,15 +61,18 @@ view : Config -> Participant.Model -> Model -> Html Msg
 view config participantModel model =
     div [ Html.Attributes.class "col" ] <|
         [ Html.h3 [] [ text "Balances" ]
+        , viewBalanceInstructions
         , viewBalances config participantModel.idToName model
         , Html.h3 [] [ text "Payments" ]
+        , viewPaymentsInstructions
         ]
             ++ (Payment.view config participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
 viewBalances : Config -> Dict Int String -> Model -> Html Msg
 viewBalances config participants model =
-    Html.table [ Html.Attributes.class "table" ]
+    Html.table
+        [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
@@ -172,6 +175,30 @@ viewBalances config participants model =
                                 )
                     )
             )
+        ]
+
+
+viewBalanceInstructions : Html msg
+viewBalanceInstructions =
+    Layout.infoBox
+        [ Html.p []
+            [ Html.text "The following table lists the total balances of expenses and payments of all participants."
+            ]
+        , Html.p []
+            [ Html.text "The suggested payments provide one possible set of payments that would make all the participants square. Clicking a suggested payment applies it by adding it to the payment component below. Balances and suggestions automatically adjust when payments and expenses change."
+            ]
+        ]
+
+
+viewPaymentsInstructions : Html msg
+viewPaymentsInstructions =
+    Layout.infoBox
+        [ Html.p []
+            [ Html.text "The following table lists all planned and done payments for evening out the expenses. Payments may be added by applying some or all of the suggested payments in the table above. If, for whatever reason, a particular payment is convenient (like someone has a certain amount of cash), it may also be added manually using the button below the table. All computations will then adjust accordingly."
+            ]
+        , Html.p []
+            [ Html.text "Once a payment has actually been done, it may be marked as such to prevent it from being deleted if the payments are to be recomputed (for example because more expenses were added)."
+            ]
         ]
 
 
