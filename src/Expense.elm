@@ -234,8 +234,6 @@ view config model =
                     [ Html.text "Participants" ]
                 , Html.td [] []
                 ]
-
-            -- Must use keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
             , Html.Keyed.node "tr" [] <|
                 [ ( "id", Html.td [] [] )
                 , ( "payer", Html.td [] [] )
@@ -277,7 +275,15 @@ view config model =
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
                              , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
-                             , Html.td [] [ Html.text (expense.amount |> Amount.toString config.amount) ]
+                             , Html.td []
+                                [ Html.span
+                                    [ data "bs-toggle" "tooltip"
+                                    , data "bs-placement" "bottom"
+                                    , Html.Attributes.title <| ((expense.amount // Dict.size expense.receivers) |> Amount.toString config.amount) ++ " per participant"
+                                    ]
+                                    [ Html.text (expense.amount |> Amount.toString config.amount)
+                                    ]
+                                ]
                              , Html.td [] [ Html.text expense.description ]
                              ]
                                 ++ List.map
