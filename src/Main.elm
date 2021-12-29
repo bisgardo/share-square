@@ -459,7 +459,7 @@ viewContent model =
 
 viewInstructions : Html msg
 viewInstructions =
-    infoBox [ Html.text "Application for balancing shared expenses independently of currency or payment methods." ]
+    Html.p [] [ Html.em [] [ Html.text "Square shared expenses independently from currency or payment methods" ] ]
 
 
 viewExpenses : Model -> List (Html Msg)

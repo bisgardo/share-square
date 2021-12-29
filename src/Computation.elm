@@ -182,10 +182,7 @@ viewBalanceInstructions : Html msg
 viewBalanceInstructions =
     Layout.infoBox
         [ Html.p []
-            [ Html.text "The following table lists the total balances of expenses and payments of all participants."
-            ]
-        , Html.p []
-            [ Html.text "The suggested payments provide one possible set of payments that would make all the participants square. Clicking a suggested payment applies it by adding it to the payment component below. Balances and suggestions automatically adjust when payments and expenses change."
+            [ Html.text "The suggested payments provide one possible set of payments that would make all the participants square. Click a suggested payment to \"apply\" it, i.e. add it to the payment component below."
             ]
         ]
 
@@ -194,10 +191,10 @@ viewPaymentsInstructions : Html msg
 viewPaymentsInstructions =
     Layout.infoBox
         [ Html.p []
-            [ Html.text "The following table lists all planned and done payments for evening out the expenses. Payments may be added by applying some or all of the suggested payments in the table above. If, for whatever reason, a particular payment is convenient (like someone has a certain amount of cash), it may also be added manually using the button below the table. All computations will then adjust accordingly."
+            [ Html.text "Payments are most easily added by applying suggestions from the table above. If, for whatever reason (like cash is involved), a certain payment is particularly convenient, it may be added manually below. The balances and suggestions above will adjust accordingly."
             ]
         , Html.p []
-            [ Html.text "Once a payment has actually been done, it may be marked as such to prevent it from being deleted if the payments are to be recomputed (for example because more expenses were added)."
+            [ Html.text "Once a payment has actually been done, it may be marked as such to prevent it from being deleted. Deleting planned payments is useful when expenses are added after the balances have been squared."
             ]
         ]
 
