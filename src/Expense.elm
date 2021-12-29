@@ -220,7 +220,8 @@ initCreate payerId receiverIds =
 
 view : Config -> Model -> List (Html Msg)
 view config model =
-    [ Html.table [ class "table" ]
+    [ viewInstructions
+    , Html.table [ class "table" ]
         [ Html.thead []
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
@@ -323,6 +324,17 @@ view config model =
     , Participant.viewCreateModal model.participant |> Html.map ParticipantMsg
     , viewCreateModal model
     ]
+
+
+viewInstructions : Html msg
+viewInstructions =
+    infoBox
+        [ Html.p []
+            [ Html.text "Start by adding participants for everyone involved using the "
+            , Html.i [ class "bi bi-file-plus" ] []
+            , Html.text " button in the table's top right corner."
+            ]
+        ]
 
 
 viewCreateOpen : Model -> Html Msg

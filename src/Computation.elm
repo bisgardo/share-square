@@ -61,15 +61,18 @@ view : Config -> Participant.Model -> Model -> Html Msg
 view config participantModel model =
     div [ Html.Attributes.class "col" ] <|
         [ Html.h3 [] [ text "Balances" ]
+        , viewBalanceInstructions
         , viewBalances config participantModel.idToName model
         , Html.h3 [] [ text "Payments" ]
+        , viewPaymentsInstructions
         ]
             ++ (Payment.view config participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
 viewBalances : Config -> Dict Int String -> Model -> Html Msg
 viewBalances config participants model =
-    Html.table [ Html.Attributes.class "table" ]
+    Html.table
+        [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
@@ -172,6 +175,27 @@ viewBalances config participants model =
                                 )
                     )
             )
+        ]
+
+
+viewBalanceInstructions : Html msg
+viewBalanceInstructions =
+    Layout.infoBox
+        [ Html.p []
+            [ Html.text "The suggested payments provide one possible set of payments that would make all the participants square. Click a suggested payment to \"apply\" it, i.e. add it to the payment component below."
+            ]
+        ]
+
+
+viewPaymentsInstructions : Html msg
+viewPaymentsInstructions =
+    Layout.infoBox
+        [ Html.p []
+            [ Html.text "Payments are most easily added by applying suggestions from the table above. If, for whatever reason (like cash is involved), a certain payment is particularly convenient, it may be added manually below. The balances and suggestions above will adjust accordingly."
+            ]
+        , Html.p []
+            [ Html.text "Once a payment has actually been done, it may be marked as such to prevent it from being deleted. Deleting planned payments is useful when expenses are added after the balances have been squared."
+            ]
         ]
 
 

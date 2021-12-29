@@ -287,7 +287,8 @@ view model =
 viewBody : Model -> Html Msg
 viewBody model =
     container <|
-        [ Html.div [ Html.Attributes.class "mb-4" ]
+        [ Html.div
+            [ Html.Attributes.class "mb-4" ]
             [ Html.h1 [ Html.Attributes.class "d-inline" ] [ Html.text "Share 'n square" ]
             , Html.p [ Html.Attributes.class "lead d-inline ms-2" ] [ Html.text "Expense calculator" ]
             , Html.div [ Html.Attributes.class "float-end" ] <| viewStorageModeSelector model.storageMode
@@ -380,7 +381,8 @@ viewContent model =
         disableSettlementTab =
             model.expense.expenses |> List.isEmpty
     in
-    [ Html.ul [ Html.Attributes.class "nav nav-tabs mb-2" ]
+    [ viewInstructions
+    , Html.ul [ Html.Attributes.class "nav nav-tabs mb-2" ]
         [ Html.li [ Html.Attributes.class "nav-item" ]
             [ Html.button
                 [ Html.Attributes.type_ "button"
@@ -453,6 +455,11 @@ viewContent model =
             (viewComputation model)
         ]
     ]
+
+
+viewInstructions : Html msg
+viewInstructions =
+    Html.p [] [ Html.em [] [ Html.text "Square shared expenses independently from currency or payment methods" ] ]
 
 
 viewExpenses : Model -> List (Html Msg)
