@@ -175,7 +175,7 @@ type Msg
     | Delete Int
     | ApplySuggestedPayment Int Int Amount
     | ApplyAllSuggestedPayments (Dict Int (List ( Int, Amount )))
-    | SetDone Payment Bool
+    | SetDone Int Bool
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
 
@@ -213,7 +213,7 @@ view config participantModel model =
                                     [ Html.Attributes.type_ "checkbox"
                                     , Html.Attributes.class "form-check-input"
                                     , Html.Attributes.checked payment.done
-                                    , Html.Events.onCheck (SetDone payment)
+                                    , Html.Events.onCheck (SetDone payment.id)
                                     ]
                                     []
                                 ]
@@ -647,11 +647,11 @@ update config balances msg model =
             in
             ( ( model |> addPayments (paymentsReversed |> List.reverse) nextId, True ), Cmd.none )
 
-        SetDone payment done ->
+        SetDone paymentId done ->
             ( ( { model
                     | payments =
                         model.payments
-                            |> List.setIf (.id >> (==) payment.id) { payment | done = done }
+                            |> List.updateIf (.id >> (==) paymentId) (\payment -> { payment | done = done })
                 }
               , True
               )
