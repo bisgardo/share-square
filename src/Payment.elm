@@ -703,7 +703,7 @@ update config balances msg model =
             ( ( model, False ), Cmd.none )
 
 
-findExistingPaymentWithSameParticipants : Payment -> Int -> List Payment -> Maybe ( Int, Amount )
+findExistingPaymentWithSameParticipants : Payment -> Int -> List Payment -> Maybe ( Payment, Amount )
 findExistingPaymentWithSameParticipants payment idx existingPayments =
     case existingPayments of
         [] ->
@@ -711,10 +711,10 @@ findExistingPaymentWithSameParticipants payment idx existingPayments =
 
         existingPayment :: remainingExistingPayments ->
             if existingPayment.payer == payment.payer && existingPayment.receiver == payment.receiver then
-                Just ( idx, existingPayment.amount )
+                Just ( existingPayment, existingPayment.amount )
 
             else if existingPayment.payer == payment.receiver && existingPayment.receiver == payment.payer then
-                Just ( idx, -existingPayment.amount )
+                Just ( existingPayment, -existingPayment.amount )
 
             else
                 findExistingPaymentWithSameParticipants payment (idx + 1) remainingExistingPayments
@@ -733,9 +733,9 @@ amendPlannedPayments donePayments currentPayments newPayments =
                         Nothing ->
                             ( newPayment :: amendedNewPayments, filteredCurrentPayments )
 
-                        Just ( index, amount ) ->
+                        Just ( existingPayment, amount ) ->
                             ( { newPayment | amount = newPayment.amount + amount } :: amendedNewPayments
-                            , filteredCurrentPayments |> List.removeAt index
+                            , filteredCurrentPayments |> List.remove existingPayment
                             )
                 )
                 ( [], currentPayments )
@@ -747,7 +747,12 @@ amendPlannedPayments donePayments currentPayments newPayments =
 addPayments : List Payment -> Bool -> Int -> Model -> Model
 addPayments payments done nextId model =
     { model
-        | payments = amendPlannedPayments model.donePayments model.payments payments
+        | payments =
+            if done then
+                model.payments ++ payments
+
+            else
+                amendPlannedPayments model.donePayments model.payments payments
         , paymentBalance =
             payments
                 |> List.foldl
