@@ -279,7 +279,7 @@ settlementToggleId =
 
 view : Model -> Browser.Document Msg
 view model =
-    { title = "Share 'n square"
+    { title = "Share 'n Square"
     , body = [ viewBody model ]
     }
 

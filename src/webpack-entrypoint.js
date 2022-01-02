@@ -55,7 +55,7 @@ new MutationObserver(mutations =>
 ).observe(document.body, {childList: true, subtree: true, attributeFilter: ['title']});
 
 const app = Elm.Main.init({
-    node: document.getElementById('app'),
+    // DOM node defaults to 'document.body'.
     flags: {
         environment: process.env.NODE_ENV, // populated with the 'mode' value by webpack 
     },
