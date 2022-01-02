@@ -11,7 +11,7 @@ import Html.Keyed
 import Layout
 import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
-import Payment
+import Payment exposing (Payment)
 import Util.Dict as Dict
 import Util.Maybe as Maybe
 
@@ -43,7 +43,7 @@ type alias ComputedModel =
     }
 
 
-import_ : Payment.StorageValues -> Model -> Model
+import_ : List Payment -> Model -> Model
 import_ payments model =
     { model
         | computed = Nothing
@@ -192,7 +192,7 @@ viewPaymentsInstructions =
             [ Html.text "Payments are most easily added by applying suggestions from the table above. If, for whatever reason (like cash is involved), a certain payment is particularly convenient, it may be added manually below. The balances and suggestions above will adjust accordingly."
             ]
         , Html.p []
-            [ Html.text "Once a payment has actually been done, it may be marked as such to prevent it from being deleted. Deleting planned payments is useful when expenses are added after the balances have been squared."
+            [ Html.text "Once a payment has actually been done, it may be marked as such to prevent it from being deleted or modified. Deleting planned payments is useful when expenses are added after the balances have been squared."
             ]
         ]
 

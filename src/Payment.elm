@@ -15,9 +15,7 @@ import Layout exposing (..)
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Participant
-import Set exposing (Set)
 import Task
-import Util.JsonDecode as Decode
 import Util.List as List
 import Util.Update as Update
 
@@ -35,7 +33,6 @@ type alias Model =
     , payments : List Payment
     , paymentBalance : Dict Int Amount
     , nextId : Int
-    , donePayments : Set Int
     }
 
 
@@ -44,39 +41,19 @@ type alias Payment =
     , payer : Int
     , receiver : Int
     , amount : Amount
+    , done : Bool
     }
 
 
-type alias StorageValues =
-    { payments : List Payment
-    , done : Set Int
-    }
-
-
-decoder : Decoder StorageValues
+decoder : Decoder Payment
 decoder =
-    Decode.map2
-        StorageValues
-        (Decode.field "p" <| Decode.nullableList paymentDecoder)
-        (Decode.field "d" (Decode.list Decode.int |> Decode.map Set.fromList))
-
-
-encode : StorageValues -> Value
-encode values =
-    [ ( "p", values.payments |> Encode.list encodePayment )
-    , ( "d", values.done |> Set.toList |> List.sort |> Encode.list Encode.int )
-    ]
-        |> Encode.object
-
-
-paymentDecoder : Decoder Payment
-paymentDecoder =
-    Decode.map4
-        (\id payerId amount receiverId ->
+    Decode.map5
+        (\id payerId amount receiverId done ->
             { id = id
             , payer = payerId
             , amount = amount
             , receiver = receiverId
+            , done = done
             }
         )
         -- ID
@@ -87,46 +64,41 @@ paymentDecoder =
         (Decode.field "a" Amount.decoder)
         -- receiver ID
         (Decode.field "r" Decode.int)
+        -- done?
+        (Decode.field "d" <| Decode.bool)
 
 
-encodePayment : Payment -> Value
-encodePayment payment =
+encode : Payment -> Value
+encode payment =
     [ ( "i", payment.id |> Encode.int )
     , ( "p", payment.payer |> Encode.int )
     , ( "a", payment.amount |> Amount.encode )
     , ( "r", payment.receiver |> Encode.int )
+    , ( "d", payment.done |> Encode.bool )
     ]
         |> Encode.object
 
 
-import_ : StorageValues -> Model -> Model
-import_ values model =
+import_ : List Payment -> Model -> Model
+import_ payments model =
     { model
-        | payments = values.payments
+        | payments = payments
         , paymentBalance =
-            values.payments
+            payments
                 |> List.foldl
                     (\payment -> updatePaymentBalances payment.payer payment.receiver payment.amount)
                     model.paymentBalance
         , nextId =
             1
-                + (values.payments
+                + (payments
                     |> List.foldl
                         (\payment -> max payment.id)
                         (model.nextId - 1)
                   )
-        , donePayments = values.done
     }
 
 
-export : Model -> StorageValues
-export model =
-    { payments = model.payments
-    , done = model.donePayments
-    }
-
-
-create : Config -> Int -> CreateModel -> Result String ( Payment, Bool )
+create : Config -> Int -> CreateModel -> Result String Payment
 create config id model =
     -- Should probably run values though their validators...
     case model.payerId |> String.toInt of
@@ -149,13 +121,12 @@ create config id model =
 
                             Just amount ->
                                 Ok
-                                    ( { id = id
-                                      , payer = payerId
-                                      , receiver = receiverId
-                                      , amount = amount
-                                      }
-                                    , model.done
-                                    )
+                                    { id = id
+                                    , payer = payerId
+                                    , receiver = receiverId
+                                    , amount = amount
+                                    , done = model.done
+                                    }
 
 
 init : ( Model, Cmd Msg )
@@ -164,7 +135,6 @@ init =
       , payments = []
       , paymentBalance = Dict.empty
       , nextId = 1
-      , donePayments = Set.empty
       }
     , Cmd.none
     )
@@ -241,14 +211,14 @@ view config participantModel model =
                                 [ Html.input
                                     [ Html.Attributes.type_ "checkbox"
                                     , Html.Attributes.class "form-check-input"
-                                    , Html.Attributes.checked (model.donePayments |> Set.member payment.id)
+                                    , Html.Attributes.checked payment.done
                                     , Html.Events.onCheck (SetDone payment.id)
                                     ]
                                     []
                                 ]
                             , Html.td
                                 [ Html.Attributes.align "right" ]
-                                (if model.donePayments |> Set.member payment.id then
+                                (if payment.done then
                                     []
 
                                  else
@@ -605,8 +575,8 @@ update config balances msg model =
                     in
                     ( ( model, False ), Cmd.none )
 
-                Ok ( payment, done ) ->
-                    ( ( model |> addPayments [ payment ] done (id + 1), True )
+                Ok payment ->
+                    ( ( model |> addPayments [ payment ] (id + 1), True )
                     , Update.delegate CloseModal
                     )
 
@@ -629,9 +599,6 @@ update config balances msg model =
                     ( ( { model
                             | payments = newPayments
                             , paymentBalance = paymentBalance
-
-                            -- Technically needed even though it's currently redundant as deletion isn't exposed to done payments.
-                            , donePayments = model.donePayments |> Set.remove paymentId
                         }
                       , True
                       )
@@ -651,6 +618,7 @@ update config balances msg model =
                                               , payer = payerId
                                               , receiver = receiverId
                                               , amount = amount
+                                              , done = False
                                               }
                                                 :: receiverPayments
                                             , receiverNextId + 1
@@ -660,20 +628,13 @@ update config balances msg model =
                             )
                             ( [], model.nextId )
             in
-            ( ( model |> addPayments (paymentsReversed |> List.reverse) False nextId, True ), Cmd.none )
+            ( ( model |> addPayments (paymentsReversed |> List.reverse) nextId, True ), Cmd.none )
 
         SetDone paymentId done ->
             ( ( { model
-                    | donePayments =
-                        let
-                            updateSet =
-                                if done then
-                                    Set.insert
-
-                                else
-                                    Set.remove
-                        in
-                        model.donePayments |> updateSet paymentId
+                    | payments =
+                        model.payments
+                            |> List.updateIf (.id >> (==) paymentId) (\payment -> { payment | done = done })
                 }
               , True
               )
@@ -703,56 +664,71 @@ update config balances msg model =
             ( ( model, False ), Cmd.none )
 
 
-findExistingPaymentWithSameParticipants : Payment -> Int -> List Payment -> Maybe ( Payment, Amount )
-findExistingPaymentWithSameParticipants payment idx existingPayments =
+findExistingPaymentWithSameParticipants : Payment -> List Payment -> Maybe ( Int, Amount )
+findExistingPaymentWithSameParticipants payment existingPayments =
+    if payment.done then
+        Nothing
+
+    else
+        findExistingPaymentWithSameParticipantsHelp payment 0 existingPayments
+
+
+findExistingPaymentWithSameParticipantsHelp : Payment -> Int -> List Payment -> Maybe ( Int, Amount )
+findExistingPaymentWithSameParticipantsHelp payment idx existingPayments =
     case existingPayments of
         [] ->
             Nothing
 
         existingPayment :: remainingExistingPayments ->
-            if existingPayment.payer == payment.payer && existingPayment.receiver == payment.receiver then
-                Just ( existingPayment, existingPayment.amount )
+            if not existingPayment.done && existingPayment.payer == payment.payer && existingPayment.receiver == payment.receiver then
+                Just ( idx, existingPayment.amount )
 
-            else if existingPayment.payer == payment.receiver && existingPayment.receiver == payment.payer then
-                Just ( existingPayment, -existingPayment.amount )
+            else if not existingPayment.done && existingPayment.payer == payment.receiver && existingPayment.receiver == payment.payer then
+                Just ( idx, -existingPayment.amount )
 
             else
-                findExistingPaymentWithSameParticipants payment (idx + 1) remainingExistingPayments
+                findExistingPaymentWithSameParticipantsHelp payment (idx + 1) remainingExistingPayments
 
 
-amendPlannedPayments : Set Int -> List Payment -> List Payment -> List Payment
-amendPlannedPayments donePayments currentPayments newPayments =
+amendPlannedPayments : List Payment -> List Payment -> List Payment
+amendPlannedPayments currentPayments newPayments =
     let
-        currentDonePayments =
-            currentPayments |> List.filter (\payment -> not <| Set.member payment.id donePayments)
-
-        ( amendedNewPaymentsResult, filteredCurrentPaymentsResult ) =
+        ( filteredCurrentPaymentsResult, amendedNewPaymentsReversedResult ) =
             List.foldl
-                (\newPayment ( amendedNewPayments, filteredCurrentPayments ) ->
-                    case findExistingPaymentWithSameParticipants newPayment 0 currentDonePayments of
+                (\newPayment ( filteredCurrentPayments, amendedNewPaymentsReversed ) ->
+                    case findExistingPaymentWithSameParticipants newPayment filteredCurrentPayments of
                         Nothing ->
-                            ( newPayment :: amendedNewPayments, filteredCurrentPayments )
+                            ( filteredCurrentPayments
+                            , newPayment :: amendedNewPaymentsReversed
+                            )
 
-                        Just ( existingPayment, amount ) ->
-                            ( { newPayment | amount = newPayment.amount + amount } :: amendedNewPayments
-                            , filteredCurrentPayments |> List.remove existingPayment
+                        Just ( existingPaymentIndex, amount ) ->
+                            let
+                                payment =
+                                    { newPayment | amount = newPayment.amount + amount }
+                            in
+                            ( filteredCurrentPayments |> List.removeAt existingPaymentIndex
+                            , (if payment.amount < 0 then
+                                -- Swap participants when amount becomes negative.
+                                { payment | payer = payment.receiver, receiver = payment.payer, amount = -payment.amount }
+
+                               else
+                                payment
+                              )
+                                :: amendedNewPaymentsReversed
                             )
                 )
-                ( [], currentPayments )
+                ( currentPayments, [] )
                 newPayments
     in
-    amendedNewPaymentsResult ++ filteredCurrentPaymentsResult |> List.reverse
+    filteredCurrentPaymentsResult ++ (amendedNewPaymentsReversedResult |> List.reverse)
 
 
-addPayments : List Payment -> Bool -> Int -> Model -> Model
-addPayments payments done nextId model =
+addPayments : List Payment -> Int -> Model -> Model
+addPayments payments nextId model =
     { model
         | payments =
-            if done then
-                model.payments ++ payments
-
-            else
-                amendPlannedPayments model.donePayments model.payments payments
+            amendPlannedPayments model.payments payments
         , paymentBalance =
             payments
                 |> List.foldl
@@ -762,12 +738,6 @@ addPayments payments done nextId model =
                     )
                     model.paymentBalance
         , nextId = nextId
-        , donePayments =
-            if done then
-                payments |> List.foldl (.id >> Set.insert) model.donePayments
-
-            else
-                model.donePayments
     }
 
 
