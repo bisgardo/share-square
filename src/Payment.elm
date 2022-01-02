@@ -12,6 +12,7 @@ import Html.Keyed
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
+import List.Extra as List
 import Maybe.Extra as Maybe
 import Participant
 import Set exposing (Set)
@@ -719,10 +720,51 @@ update config balances msg model =
             ( ( model, False ), Cmd.none )
 
 
+findExistingPaymentWithSameParticipants : Payment -> Int -> List Payment -> Maybe ( Int, Amount )
+findExistingPaymentWithSameParticipants payment idx existingPayments =
+    case existingPayments of
+        [] ->
+            Nothing
+
+        existingPayment :: remainingExistingPayments ->
+            if existingPayment.payer == payment.payer && existingPayment.receiver == payment.receiver then
+                Just ( idx, existingPayment.amount )
+
+            else if existingPayment.payer == payment.receiver && existingPayment.receiver == payment.payer then
+                Just ( idx, -existingPayment.amount )
+
+            else
+                findExistingPaymentWithSameParticipants payment (idx + 1) remainingExistingPayments
+
+
+
+amendPlannedPayments : Set Int -> List Payment -> List Payment -> List Payment
+amendPlannedPayments donePayments currentPayments newPayments =
+    let
+        currentDonePayments =
+            currentPayments |> List.filter (\payment -> not <| Set.member payment.id donePayments)
+
+        ( amendedNewPaymentsResult, filteredCurrentPaymentsResult ) =
+            List.foldl
+                (\newPayment ( amendedNewPayments, filteredCurrentPayments ) ->
+                    case findExistingPaymentWithSameParticipants newPayment 0 currentDonePayments of
+                        Nothing ->
+                            ( newPayment :: amendedNewPayments, filteredCurrentPayments )
+
+                        Just ( index, amount ) ->
+                            ( { newPayment | amount = newPayment.amount + amount } :: amendedNewPayments
+                            , filteredCurrentPayments |> List.removeAt index
+                            )
+                )
+                ( [], currentPayments )
+                newPayments
+    in
+    amendedNewPaymentsResult ++ filteredCurrentPaymentsResult |> List.reverse
+
 addPayments : List Payment -> Bool -> Int -> Model -> Model
 addPayments payments done nextId model =
     { model
-        | payments = model.payments ++ payments
+        | payments = amendPlannedPayments model.donePayments model.payments payments
         , paymentBalance =
             payments
                 |> List.foldl
