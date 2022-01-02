@@ -93,7 +93,7 @@ type alias StorageConfig =
 type alias StorageValues =
     { participants : List Participant
     , expenses : List Expense
-    , payments : Payment.StorageValues
+    , payments : List Payment
     , config : StorageConfig
     }
 
@@ -139,7 +139,7 @@ storageValuesDecoder =
         -- expenses
         (Decode.field "e" <| Decode.nullableList Expense.decoder)
         -- payments
-        (Decode.field "y" <| Payment.decoder)
+        (Decode.field "y" <| Decode.nullableList Payment.decoder)
         -- config
         (Decode.field "c" <| storageConfigDecoder)
 
@@ -148,7 +148,7 @@ encodeStorageValues : StorageValues -> Value
 encodeStorageValues values =
     [ ( "p", values.participants |> Encode.list Participant.encode )
     , ( "e", values.expenses |> Encode.list Expense.encode )
-    , ( "y", values.payments |> Payment.encode )
+    , ( "y", values.payments |> Encode.list Payment.encode )
     , ( "c", values.config |> encodeStorageConfig )
     ]
         |> Encode.object
@@ -616,6 +616,6 @@ export : Model -> StorageValues
 export model =
     { participants = model.expense.participant.participants
     , expenses = model.expense.expenses
-    , payments = Payment.export model.computation.payment
+    , payments = model.computation.payment.payments
     , config = { decimalPlaces = model.config.amount.decimalPlaces }
     }
