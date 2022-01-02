@@ -203,8 +203,7 @@ type Msg
     | CreateApplySuggestedAmount Amount
     | CreateSubmit
     | Delete Int
-    | ApplySuggestedPayment Int Int Amount
-    | ApplyAllSuggestedPayments (Dict Int (List ( Int, Amount )))
+    | ApplySuggestedPayments (Dict Int (List ( Int, Amount )))
     | SetDone Int Bool
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
@@ -639,23 +638,7 @@ update config balances msg model =
                     , createModalOpenId |> Dom.focus |> Task.attempt DomMsg
                     )
 
-        ApplySuggestedPayment payerId receiverId amount ->
-            ( ( model
-                    |> addPayments
-                        [ { id = model.nextId
-                          , payer = payerId
-                          , receiver = receiverId
-                          , amount = amount
-                          }
-                        ]
-                        False
-                        (model.nextId + 1)
-              , True
-              )
-            , Cmd.none
-            )
-
-        ApplyAllSuggestedPayments suggestedPayments ->
+        ApplySuggestedPayments suggestedPayments ->
             let
                 ( paymentsReversed, nextId ) =
                     suggestedPayments
@@ -737,7 +720,6 @@ findExistingPaymentWithSameParticipants payment idx existingPayments =
                 findExistingPaymentWithSameParticipants payment (idx + 1) remainingExistingPayments
 
 
-
 amendPlannedPayments : Set Int -> List Payment -> List Payment -> List Payment
 amendPlannedPayments donePayments currentPayments newPayments =
     let
@@ -760,6 +742,7 @@ amendPlannedPayments donePayments currentPayments newPayments =
                 newPayments
     in
     amendedNewPaymentsResult ++ filteredCurrentPaymentsResult |> List.reverse
+
 
 addPayments : List Payment -> Bool -> Int -> Model -> Model
 addPayments payments done nextId model =

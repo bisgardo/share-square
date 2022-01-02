@@ -86,7 +86,7 @@ viewBalances config participants model =
                                 Just suggestedPayments ->
                                     [ Html.button
                                         [ Html.Attributes.class "ms-1 badge btn btn-primary"
-                                        , Html.Events.onClick (Payment.ApplyAllSuggestedPayments suggestedPayments |> PaymentMsg)
+                                        , Html.Events.onClick (Payment.ApplySuggestedPayments suggestedPayments |> PaymentMsg)
                                         ]
                                         [ Html.text "apply all" ]
                                     ]
@@ -154,10 +154,8 @@ viewBalances config participants model =
                                                             (\( receiverName, receiverId, suggestedAmount ) ->
                                                                 div []
                                                                     [ Layout.internalLink
-                                                                        (Payment.ApplySuggestedPayment
-                                                                            participantId
-                                                                            receiverId
-                                                                            suggestedAmount
+                                                                        (Payment.ApplySuggestedPayments
+                                                                            (Dict.singleton participantId [ ( receiverId, suggestedAmount ) ])
                                                                             |> PaymentMsg
                                                                         )
                                                                         [ Html.text <|
