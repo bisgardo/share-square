@@ -251,7 +251,13 @@ view config model =
                             |> (\htmls ->
                                     -- Ensure that there is at least 1 cell.
                                     if htmls |> List.isEmpty then
-                                        [ ( "empty", Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
+                                        -- HACK Using best-guess value for next ID as key in attempt to prevent
+                                        -- redundant removal/reinsertion of the cell containing the '+' button
+                                        -- (see 'https://github.com/elm/virtual-dom/issues/178').
+                                        -- This breaks the focus originally put on the element,
+                                        -- but due to the mutation observer also causes the tooltip to be
+                                        -- disposed and recreated for no good reason.
+                                        [ ( model.participant.nextId |> String.fromInt, Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
 
                                     else
                                         htmls

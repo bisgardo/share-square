@@ -29,6 +29,7 @@ new MutationObserver(mutations =>
         case 'childList':
             mutation.addedNodes.forEach(node => {
                 if (node.nodeType === Node.ELEMENT_NODE) {
+//                    console.debug('node added', node)
                     if (node.matches(TOOLTIP_SELECTOR)) {
                         initTooltip(node);
                     }
@@ -37,6 +38,7 @@ new MutationObserver(mutations =>
             });
             mutation.removedNodes.forEach(node => {
                 if (node.nodeType === Node.ELEMENT_NODE) {
+//                    console.debug('node removed', node)
                     if (node.matches(TOOLTIP_SELECTOR)) {
                         destroyTooltip(node);
                     }
@@ -47,6 +49,7 @@ new MutationObserver(mutations =>
         case 'attributes':
             const node = mutation.target;
             if (node.matches(TOOLTIP_SELECTOR) && node.title) {
+//                console.debug('title attribute changed', node)
                 initTooltip(node); // simply re-initializing seems sufficient
             }
             break;
