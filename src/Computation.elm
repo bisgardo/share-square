@@ -39,7 +39,7 @@ type alias ComputedModel =
     { expenses : Expenses
     , debts : Expenses
     , balance : Dict Int Amount
-    , suggestedPayments : Dict Int (List ( Int, Amount ))
+    , suggestedPayments : Dict Int (List Payment.SuggestedPayment)
     }
 
 
@@ -142,27 +142,46 @@ viewBalances config participants model =
                                                 |> Dict.get participantId
                                                 |> Maybe.unwrap []
                                                     (List.map
-                                                        (\( receiverId, suggestedAmount ) ->
+                                                        (\( receiverId, suggestedAmount, payment ) ->
                                                             ( participants |> Participant.lookupName receiverId
                                                             , receiverId
-                                                            , suggestedAmount
+                                                            , ( suggestedAmount, payment )
                                                             )
                                                         )
                                                         -- Sort by name, then ID.
-                                                        >> List.sort
+                                                        >> List.sortBy (\( receiverName, receiverId, _ ) -> ( receiverName, receiverId ))
                                                         >> List.map
-                                                            (\( receiverName, receiverId, suggestedAmount ) ->
+                                                            (\( receiverName, receiverId, ( suggestedAmount, payment ) ) ->
                                                                 div []
                                                                     [ Layout.internalLink
                                                                         (Payment.ApplySuggestedPayments
-                                                                            (Dict.singleton participantId [ ( receiverId, suggestedAmount ) ])
+                                                                            (Dict.singleton participantId [ ( receiverId, suggestedAmount, payment ) ])
                                                                             |> PaymentMsg
                                                                         )
                                                                         [ Html.text <|
-                                                                            "Pay "
-                                                                                ++ Amount.toString config.amount suggestedAmount
-                                                                                ++ " to "
-                                                                                ++ receiverName
+                                                                            case payment of
+                                                                                Nothing ->
+                                                                                    "Pay "
+                                                                                        ++ Amount.toString config.amount suggestedAmount
+                                                                                        ++ " to "
+                                                                                        ++ receiverName
+
+                                                                                Just ( paymentId, inverse ) ->
+                                                                                    if inverse then
+                                                                                        "Receive "
+                                                                                            ++ Amount.toString config.amount suggestedAmount
+                                                                                            ++ " less from "
+                                                                                            ++ receiverName
+                                                                                            ++ " in payment #"
+                                                                                            ++ String.fromInt paymentId
+
+                                                                                    else
+                                                                                        "Pay additional "
+                                                                                            ++ Amount.toString config.amount suggestedAmount
+                                                                                            ++ " to "
+                                                                                            ++ receiverName
+                                                                                            ++ " in payment #"
+                                                                                            ++ String.fromInt paymentId
                                                                         ]
                                                                     ]
                                                             )
@@ -271,6 +290,28 @@ subscriptions =
     .payment >> Payment.subscriptions >> Sub.map PaymentMsg
 
 
+findExistingPaymentId : Int -> Int -> List Payment -> Maybe ( Int, Bool )
+findExistingPaymentId payerId receiverId payments =
+    case payments of
+        [] ->
+            Nothing
+
+        existingPayment :: remainingExistingPayments ->
+            if not existingPayment.done && existingPayment.payer == payerId && existingPayment.receiver == receiverId then
+                Just ( existingPayment.id, False )
+
+            else if not existingPayment.done && existingPayment.payer == receiverId && existingPayment.receiver == payerId then
+                Just ( existingPayment.id, True )
+
+            else
+                findExistingPaymentId payerId receiverId remainingExistingPayments
+
+
+withExistingPaymentId : List Payment -> Int -> ( Int, Amount ) -> Payment.SuggestedPayment
+withExistingPaymentId existingPayments payerId ( receiverId, amount ) =
+    ( receiverId, amount, findExistingPaymentId payerId receiverId existingPayments )
+
+
 update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update config msg model =
     case msg of
@@ -309,6 +350,7 @@ update config msg model =
                                 , suggestedPayments =
                                     -- The result value of sumValues only contains keys from the first argument.
                                     Payment.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
+                                        |> Dict.map (\payerId -> List.map (withExistingPaymentId model.payment.payments payerId))
                                 }
                     }
                   , False
@@ -331,6 +373,7 @@ update config msg model =
                                         { computed
                                             | suggestedPayments =
                                                 Payment.autosuggestPayments (Dict.sumValues computed.balance paymentModel.paymentBalance)
+                                                    |> Dict.map (\payerId -> List.map (withExistingPaymentId paymentModel.payments payerId))
                                         }
                                     )
 

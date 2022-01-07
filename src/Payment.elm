@@ -163,6 +163,14 @@ type alias CreateModel =
     }
 
 
+{-| Tuple of receiver ID, amount, and ID of existing payment to amend.
+The payment ID is represented as a pair of the ID and a boolean indicating
+whether the amount should be added (false) or subtracted (true).
+-}
+type alias SuggestedPayment =
+    ( Int, Amount, Maybe ( Int, Bool ) )
+
+
 type Msg
     = LoadCreate (List Int)
     | CloseModal
@@ -173,7 +181,7 @@ type Msg
     | CreateApplySuggestedAmount Amount
     | CreateSubmit
     | Delete Int
-    | ApplySuggestedPayments (Dict Int (List ( Int, Amount )))
+    | ApplySuggestedPayments (Dict Int (List SuggestedPayment))
     | SetDone Int Bool
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
@@ -576,7 +584,18 @@ update config balances msg model =
                     ( ( model, False ), Cmd.none )
 
                 Ok payment ->
-                    ( ( model |> addPayments [ payment ] (id + 1), True )
+                    ( ( { model
+                            | payments =
+                                model.payments ++ [ payment ]
+                            , paymentBalance =
+                                model.paymentBalance
+                                    |> updatePaymentBalances payment.payer
+                                        payment.receiver
+                                        payment.amount
+                            , nextId = id + 1
+                        }
+                      , True
+                      )
                     , Update.delegate CloseModal
                     )
 
@@ -607,28 +626,74 @@ update config balances msg model =
 
         ApplySuggestedPayments suggestedPayments ->
             let
-                ( paymentsReversed, nextId ) =
+                modelResult =
                     suggestedPayments
                         |> Dict.foldl
-                            (\payerId payerSuggestedPayments ( payerPaymentsReversed, payerNextId ) ->
+                            (\payerId payerSuggestedPayments outerModelResult ->
                                 payerSuggestedPayments
                                     |> List.foldl
-                                        (\( receiverId, amount ) ( receiverPayments, receiverNextId ) ->
-                                            ( { id = receiverNextId
-                                              , payer = payerId
-                                              , receiver = receiverId
-                                              , amount = amount
-                                              , done = False
-                                              }
-                                                :: receiverPayments
-                                            , receiverNextId + 1
-                                            )
+                                        (\( receiverId, amount, existingPaymentId ) innerModelResult ->
+                                            case existingPaymentId of
+                                                Nothing ->
+                                                    { innerModelResult
+                                                        | payments =
+                                                            innerModelResult.payments
+                                                                ++ [ { id = innerModelResult.nextId
+                                                                     , payer = payerId
+                                                                     , receiver = receiverId
+                                                                     , amount = amount
+                                                                     , done = False
+                                                                     }
+                                                                   ]
+                                                        , paymentBalance =
+                                                            innerModelResult.paymentBalance
+                                                                |> updatePaymentBalances payerId
+                                                                    receiverId
+                                                                    amount
+                                                        , nextId = innerModelResult.nextId + 1
+                                                    }
+
+                                                Just ( paymentId, inverse ) ->
+                                                    { innerModelResult
+                                                        | payments =
+                                                            innerModelResult.payments
+                                                                |> List.updateIf (.id >> (==) paymentId)
+                                                                    (\payment ->
+                                                                        let
+                                                                            result =
+                                                                                { payment
+                                                                                    | amount =
+                                                                                        if inverse then
+                                                                                            payment.amount - amount
+
+                                                                                        else
+                                                                                            payment.amount + amount
+                                                                                }
+                                                                        in
+                                                                        -- Swap sender/receiver if resulting amount is negative.
+                                                                        if result.amount < 0 then
+                                                                            { result
+                                                                                | payer = result.receiver
+                                                                                , receiver = result.payer
+                                                                                , amount = -result.amount
+                                                                            }
+
+                                                                        else
+                                                                            result
+                                                                    )
+                                                        , paymentBalance =
+                                                            innerModelResult.paymentBalance
+                                                                |> updatePaymentBalances payerId
+                                                                    receiverId
+                                                                    amount
+                                                        , nextId = innerModelResult.nextId + 1
+                                                    }
                                         )
-                                        ( payerPaymentsReversed, payerNextId )
+                                        outerModelResult
                             )
-                            ( [], model.nextId )
+                            model
             in
-            ( ( model |> addPayments (paymentsReversed |> List.reverse) nextId, True ), Cmd.none )
+            ( ( modelResult, True ), Cmd.none )
 
         SetDone paymentId done ->
             ( ( { model
@@ -662,83 +727,6 @@ update config balances msg model =
                             ""
             in
             ( ( model, False ), Cmd.none )
-
-
-findExistingPaymentWithSameParticipants : Payment -> List Payment -> Maybe ( Int, Amount )
-findExistingPaymentWithSameParticipants payment existingPayments =
-    if payment.done then
-        Nothing
-
-    else
-        findExistingPaymentWithSameParticipantsHelp payment 0 existingPayments
-
-
-findExistingPaymentWithSameParticipantsHelp : Payment -> Int -> List Payment -> Maybe ( Int, Amount )
-findExistingPaymentWithSameParticipantsHelp payment idx existingPayments =
-    case existingPayments of
-        [] ->
-            Nothing
-
-        existingPayment :: remainingExistingPayments ->
-            if not existingPayment.done && existingPayment.payer == payment.payer && existingPayment.receiver == payment.receiver then
-                Just ( idx, existingPayment.amount )
-
-            else if not existingPayment.done && existingPayment.payer == payment.receiver && existingPayment.receiver == payment.payer then
-                Just ( idx, -existingPayment.amount )
-
-            else
-                findExistingPaymentWithSameParticipantsHelp payment (idx + 1) remainingExistingPayments
-
-
-amendPlannedPayments : List Payment -> List Payment -> List Payment
-amendPlannedPayments currentPayments newPayments =
-    let
-        ( filteredCurrentPaymentsResult, amendedNewPaymentsReversedResult ) =
-            List.foldl
-                (\newPayment ( filteredCurrentPayments, amendedNewPaymentsReversed ) ->
-                    case findExistingPaymentWithSameParticipants newPayment filteredCurrentPayments of
-                        Nothing ->
-                            ( filteredCurrentPayments
-                            , newPayment :: amendedNewPaymentsReversed
-                            )
-
-                        Just ( existingPaymentIndex, amount ) ->
-                            let
-                                payment =
-                                    { newPayment | amount = newPayment.amount + amount }
-                            in
-                            ( filteredCurrentPayments |> List.removeAt existingPaymentIndex
-                            , (if payment.amount < 0 then
-                                -- Swap participants when amount becomes negative.
-                                { payment | payer = payment.receiver, receiver = payment.payer, amount = -payment.amount }
-
-                               else
-                                payment
-                              )
-                                :: amendedNewPaymentsReversed
-                            )
-                )
-                ( currentPayments, [] )
-                newPayments
-    in
-    filteredCurrentPaymentsResult ++ (amendedNewPaymentsReversedResult |> List.reverse)
-
-
-addPayments : List Payment -> Int -> Model -> Model
-addPayments payments nextId model =
-    { model
-        | payments =
-            amendPlannedPayments model.payments payments
-        , paymentBalance =
-            payments
-                |> List.foldl
-                    (\payment paymentBalance ->
-                        paymentBalance
-                            |> updatePaymentBalances payment.payer payment.receiver payment.amount
-                    )
-                    model.paymentBalance
-        , nextId = nextId
-    }
 
 
 findSuggestedPayment : Dict Int Amount -> Maybe ( ( Int, Amount ), ( Int, Amount ) )
