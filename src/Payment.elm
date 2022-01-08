@@ -121,12 +121,14 @@ create config id model =
 
                             Just amount ->
                                 Ok
-                                    { id = id
-                                    , payer = payerId
-                                    , receiver = receiverId
-                                    , amount = amount
-                                    , done = model.done
-                                    }
+                                    ({ id = id
+                                     , payer = payerId
+                                     , receiver = receiverId
+                                     , amount = amount
+                                     , done = model.done
+                                     }
+                                        |> normalizePayment
+                                    )
 
 
 init : ( Model, Cmd Msg )
@@ -529,7 +531,7 @@ update config balances msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = Expense.validateAmount config.amount amount
+                                                , feedback = Expense.validateAmountInput config.amount validatePaymentAmount amount
                                             }
                                     }
                                 )
@@ -644,10 +646,12 @@ update config balances msg model =
                                                                      , amount = amount
                                                                      , done = False
                                                                      }
+                                                                        |> normalizePayment
                                                                    ]
                                                         , paymentBalance =
                                                             innerModelResult.paymentBalance
-                                                                |> updatePaymentBalances payerId
+                                                                |> updatePaymentBalances
+                                                                    payerId
                                                                     receiverId
                                                                     amount
                                                         , nextId = innerModelResult.nextId + 1
@@ -659,31 +663,20 @@ update config balances msg model =
                                                             innerModelResult.payments
                                                                 |> List.updateIf (.id >> (==) paymentId)
                                                                     (\payment ->
-                                                                        let
-                                                                            result =
-                                                                                { payment
-                                                                                    | amount =
-                                                                                        if inverse then
-                                                                                            payment.amount - amount
+                                                                        { payment
+                                                                            | amount =
+                                                                                if inverse then
+                                                                                    payment.amount - amount
 
-                                                                                        else
-                                                                                            payment.amount + amount
-                                                                                }
-                                                                        in
-                                                                        -- Swap sender/receiver if resulting amount is negative.
-                                                                        if result.amount < 0 then
-                                                                            { result
-                                                                                | payer = result.receiver
-                                                                                , receiver = result.payer
-                                                                                , amount = -result.amount
-                                                                            }
-
-                                                                        else
-                                                                            result
+                                                                                else
+                                                                                    payment.amount + amount
+                                                                        }
+                                                                            |> normalizePayment
                                                                     )
                                                         , paymentBalance =
                                                             innerModelResult.paymentBalance
-                                                                |> updatePaymentBalances payerId
+                                                                |> updatePaymentBalances
+                                                                    payerId
                                                                     receiverId
                                                                     amount
                                                         , nextId = innerModelResult.nextId + 1
@@ -727,6 +720,28 @@ update config balances msg model =
                             ""
             in
             ( ( model, False ), Cmd.none )
+
+
+normalizePayment : Payment -> Payment
+normalizePayment result =
+    if result.amount < 0 then
+        { result
+            | payer = result.receiver
+            , receiver = result.payer
+            , amount = -result.amount
+        }
+
+    else
+        result
+
+
+validatePaymentAmount : Amount -> Feedback
+validatePaymentAmount amount =
+    if amount < 0 then
+        Info "Payments with negative amounts will swap payer and receiver."
+
+    else
+        None
 
 
 findSuggestedPayment : Dict Int Amount -> Maybe ( ( Int, Amount ), ( Int, Amount ) )

@@ -572,7 +572,7 @@ update config msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = validateAmount config.amount amount
+                                                , feedback = validateAmountInput config.amount validateExpenseAmount amount
                                             }
                                     }
                                 )
@@ -672,25 +672,31 @@ update config msg model =
             )
 
 
-validateAmount : Amount.Config -> String -> Feedback
-validateAmount locale amount =
-    if amount |> String.isEmpty then
+validateAmountInput : Amount.Config -> (Amount -> Feedback) -> String -> Feedback
+validateAmountInput locale validateAmountValue input =
+    if input |> String.isEmpty then
         None
 
     else
-        case amount |> Amount.fromString locale of
+        case input |> Amount.fromString locale of
             Nothing ->
                 Error "Not a number."
 
-            Just value ->
-                if value < 0 then
-                    Error "Number is negative."
-
-                else if value > Amount.max then
-                    Error "Number is too large."
+            Just amount ->
+                if abs amount > Amount.max then
+                    Error "Numerical value is too large."
 
                 else
-                    None
+                    validateAmountValue amount
+
+
+validateExpenseAmount : Amount -> Feedback
+validateExpenseAmount amount =
+    if amount < 0 then
+        Info "An expense with a negative amount corresponds to an evenly distributed debt or income."
+
+    else
+        None
 
 
 validateDescription : String -> Feedback
