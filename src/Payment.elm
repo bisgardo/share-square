@@ -16,7 +16,6 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Participant
 import Task
-import Util.List as List
 import Util.Update as Update
 
 
@@ -182,7 +181,7 @@ type Msg
     | CreateSetDone Bool
     | CreateApplySuggestedAmount Amount
     | CreateSubmit
-    | Delete Int
+    | Delete (List Int)
     | ApplySuggestedPayments (Dict Int (List SuggestedPayment))
     | SetDone Int Bool
     | LayoutMsg Layout.Msg
@@ -198,7 +197,23 @@ view config participantModel model =
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
-                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Done" ]
+                , Html.th [ Html.Attributes.scope "col" ] <|
+                    [ Html.text "Done" ]
+                        ++ (let
+                                plannedPayments =
+                                    model.payments |> List.filterNot .done
+                            in
+                            if plannedPayments |> List.isEmpty then
+                                []
+
+                            else
+                                [ Html.button
+                                    [ Html.Attributes.class "ms-1 badge btn btn-primary"
+                                    , Html.Events.onClick <| Delete (plannedPayments |> List.map .id)
+                                    ]
+                                    [ Html.text "delete all planned" ]
+                                ]
+                           )
                 , Html.th [] []
                 ]
             ]
@@ -237,7 +252,7 @@ view config participantModel model =
                                         , data "bs-placement" "left"
                                         , Html.Attributes.title "Delete"
                                         , Html.Attributes.attribute "role" "button"
-                                        , Html.Events.onClick (Delete payment.id)
+                                        , Html.Events.onClick <| Delete [ payment.id ]
                                         ]
                                         [ Html.i [ Html.Attributes.class "bi bi-trash" ] [] ]
                                     ]
@@ -601,30 +616,26 @@ update config balances msg model =
                     , Update.delegate CloseModal
                     )
 
-        Delete paymentId ->
-            case model.payments |> List.withoutFirstMatch (.id >> (==) paymentId) of
-                ( Nothing, _ ) ->
-                    -- Should never happen.
-                    let
-                        _ =
-                            Debug.log "error" <| "Cannot delete payment with non-existent ID '" ++ (paymentId |> String.fromInt) ++ "'."
-                    in
-                    ( ( model, False ), Cmd.none )
-
-                ( Just payment, newPayments ) ->
-                    let
-                        paymentBalance =
-                            model.paymentBalance
-                                |> updatePaymentBalances payment.receiver payment.payer payment.amount
-                    in
-                    ( ( { model
-                            | payments = newPayments
-                            , paymentBalance = paymentBalance
-                        }
-                      , True
-                      )
-                    , createModalOpenId |> Dom.focus |> Task.attempt DomMsg
-                    )
+        Delete paymentIds ->
+            let
+                ( deletedPayments, retainedPayments ) =
+                    model.payments
+                        |> List.partition (\payment -> List.member payment.id paymentIds)
+            in
+            ( ( { model
+                    | payments = retainedPayments
+                    , paymentBalance =
+                        deletedPayments
+                            |> List.foldl
+                                (\deletedPayment ->
+                                    updatePaymentBalances deletedPayment.receiver deletedPayment.payer deletedPayment.amount
+                                )
+                                model.paymentBalance
+                }
+              , True
+              )
+            , createModalOpenId |> Dom.focus |> Task.attempt DomMsg
+            )
 
         ApplySuggestedPayments suggestedPayments ->
             let
