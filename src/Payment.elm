@@ -198,22 +198,24 @@ view config participantModel model =
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
                 , Html.th [ Html.Attributes.scope "col" ] <|
-                    [ Html.text "Done" ]
-                        ++ (let
-                                plannedPayments =
-                                    model.payments |> List.filterNot .done
-                            in
-                            if plannedPayments |> List.isEmpty then
-                                []
+                    [ Html.text "Done"
+                    , let
+                        plannedPayments =
+                            model.payments |> List.filterNot .done
+                      in
+                      Html.button
+                        [ Html.Attributes.class <|
+                            "ms-1 badge btn btn-primary"
+                                ++ (if plannedPayments |> List.isEmpty then
+                                        " invisible"
 
-                            else
-                                [ Html.button
-                                    [ Html.Attributes.class "ms-1 badge btn btn-primary"
-                                    , Html.Events.onClick <| Delete (plannedPayments |> List.map .id)
-                                    ]
-                                    [ Html.text "delete all planned" ]
-                                ]
-                           )
+                                    else
+                                        ""
+                                   )
+                        , Html.Events.onClick <| Delete (plannedPayments |> List.map .id)
+                        ]
+                        [ Html.text "delete all planned" ]
+                    ]
                 , Html.th [] []
                 ]
             ]
@@ -243,20 +245,23 @@ view config participantModel model =
                                 ]
                             , Html.td
                                 [ Html.Attributes.align "right" ]
-                                (if payment.done then
-                                    []
+                                [ Html.a
+                                    [ data "bs-toggle" "tooltip"
+                                    , data "bs-placement" "left"
+                                    , Html.Attributes.class <|
+                                        "text-reset"
+                                            ++ (if payment.done then
+                                                    " invisible"
 
-                                 else
-                                    [ Html.a
-                                        [ data "bs-toggle" "tooltip"
-                                        , data "bs-placement" "left"
-                                        , Html.Attributes.title "Delete"
-                                        , Html.Attributes.attribute "role" "button"
-                                        , Html.Events.onClick <| Delete [ payment.id ]
-                                        ]
-                                        [ Html.i [ Html.Attributes.class "bi bi-trash" ] [] ]
+                                                else
+                                                    ""
+                                               )
+                                    , Html.Attributes.title "Delete"
+                                    , Html.Attributes.attribute "role" "button"
+                                    , Html.Events.onClick <| Delete [ payment.id ]
                                     ]
-                                )
+                                    [ Html.i [ Html.Attributes.class "bi bi-trash" ] [] ]
+                                ]
                             ]
                         )
                     )

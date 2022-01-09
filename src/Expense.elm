@@ -309,6 +309,7 @@ view config model =
                                         [ Html.a
                                             [ data "bs-toggle" "tooltip"
                                             , data "bs-placement" "left"
+                                            , Html.Attributes.class "text-reset"
                                             , Html.Attributes.title "Edit"
                                             , Html.Attributes.attribute "role" "button"
                                             ]
