@@ -77,20 +77,25 @@ viewBalances config participants model =
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Balance" ]
-                , Html.th [ Html.Attributes.scope "col" ] <|
-                    [ Html.text "Suggested payments" ]
-                        ++ (case model.computed |> Maybe.map .suggestedPayments |> Maybe.nothingIf Dict.isEmpty of
-                                Nothing ->
-                                    []
+                , Html.th [ Html.Attributes.scope "col" ]
+                    [ Html.text "Suggested payments"
+                    , let
+                        suggestedPayments =
+                            model.computed |> Maybe.map .suggestedPayments |> Maybe.withDefault Dict.empty
+                      in
+                      Html.button
+                        [ Html.Attributes.class <|
+                            "ms-1 badge btn btn-primary"
+                                ++ (if suggestedPayments |> Dict.isEmpty then
+                                        " invisible"
 
-                                Just suggestedPayments ->
-                                    [ Html.button
-                                        [ Html.Attributes.class "ms-1 badge btn btn-primary"
-                                        , Html.Events.onClick (Payment.ApplySuggestedPayments suggestedPayments |> PaymentMsg)
-                                        ]
-                                        [ Html.text "apply all" ]
-                                    ]
-                           )
+                                    else
+                                        ""
+                                   )
+                        , Html.Events.onClick (Payment.ApplySuggestedPayments suggestedPayments |> PaymentMsg)
+                        ]
+                        [ Html.text "apply all" ]
+                    ]
                 ]
             ]
         , Html.Keyed.node "tbody"
