@@ -84,14 +84,8 @@ viewBalances config participants model =
                             model.computed |> Maybe.map .suggestedPayments |> Maybe.withDefault Dict.empty
                       in
                       Html.button
-                        [ Html.Attributes.class <|
-                            "ms-1 badge btn btn-primary"
-                                ++ (if suggestedPayments |> Dict.isEmpty then
-                                        " invisible"
-
-                                    else
-                                        ""
-                                   )
+                        [ Html.Attributes.class "ms-1 badge btn btn-primary"
+                        , Html.Attributes.disabled (suggestedPayments |> Dict.isEmpty)
                         , Html.Events.onClick (Payment.ApplySuggestedPayments suggestedPayments |> PaymentMsg)
                         ]
                         [ Html.text "apply all" ]

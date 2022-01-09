@@ -204,14 +204,8 @@ view config participantModel model =
                             model.payments |> List.filterNot .done
                       in
                       Html.button
-                        [ Html.Attributes.class <|
-                            "ms-1 badge btn btn-primary"
-                                ++ (if plannedPayments |> List.isEmpty then
-                                        " invisible"
-
-                                    else
-                                        ""
-                                   )
+                        [ Html.Attributes.class "ms-1 badge btn btn-primary"
+                        , Html.Attributes.disabled (plannedPayments |> List.isEmpty)
                         , Html.Events.onClick <| Delete (plannedPayments |> List.map .id)
                         ]
                         [ Html.text "delete all planned" ]
