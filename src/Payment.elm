@@ -35,8 +35,6 @@ type alias Model =
     }
 
 
-
-
 import_ : List Payment -> Model -> Model
 import_ payments model =
     { model
@@ -689,8 +687,6 @@ update config balances msg model =
                             ""
             in
             ( ( model, False ), Cmd.none )
-
-
 
 
 validatePaymentAmount : Amount -> Feedback
