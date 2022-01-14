@@ -25,27 +25,40 @@ const TOOLTIP_SELECTOR = '[data-bs-toggle="tooltip"]';
 // are being added or removed.
 new MutationObserver(mutations =>
     mutations.forEach(mutation => {
-        mutation.addedNodes.forEach(node => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                if (node.matches(TOOLTIP_SELECTOR)) {
-                    initTooltip(node);
+        switch (mutation.type) {
+        case 'childList':
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+//                    console.debug('node added', node)
+                    if (node.matches(TOOLTIP_SELECTOR)) {
+                        initTooltip(node);
+                    }
+                    node.querySelectorAll(TOOLTIP_SELECTOR).forEach(initTooltip);
                 }
-                node.querySelectorAll(TOOLTIP_SELECTOR).forEach(initTooltip);
-            }
-        });
-        mutation.removedNodes.forEach(node => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                if (node.matches(TOOLTIP_SELECTOR)) {
-                    destroyTooltip(node);
+            });
+            mutation.removedNodes.forEach(node => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+//                    console.debug('node removed', node)
+                    if (node.matches(TOOLTIP_SELECTOR)) {
+                        destroyTooltip(node);
+                    }
+                    node.querySelectorAll(TOOLTIP_SELECTOR).forEach(destroyTooltip);
                 }
-                node.querySelectorAll(TOOLTIP_SELECTOR).forEach(destroyTooltip);
+            });
+            break;
+        case 'attributes':
+            const node = mutation.target;
+            if (node.matches(TOOLTIP_SELECTOR) && node.title) {
+//                console.debug('title attribute changed', node)
+                initTooltip(node); // simply re-initializing seems sufficient
             }
-        });
+            break;
+        }
     })
-).observe(document.body, {childList: true, subtree: true});
+).observe(document.body, {childList: true, subtree: true, attributeFilter: ['title']});
 
 const app = Elm.Main.init({
-    node: document.getElementById('app'),
+    // DOM node defaults to 'document.body'.
     flags: {
         environment: process.env.NODE_ENV, // populated with the 'mode' value by webpack 
     },

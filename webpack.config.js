@@ -1,5 +1,6 @@
 const path = require('path');
 const webpack = require('webpack');
+const HtmlWebpackPlugin = require('html-webpack-plugin')
 
 // Mode defaults to "production" if not specified using the CLI flag '--mode'.
 
@@ -9,6 +10,12 @@ module.exports = (env, argv) => ({
         path: path.resolve(__dirname, 'dist'),
         filename: 'app.js',
     },
+    plugins: [
+        // Generate 'index.html'.
+        new HtmlWebpackPlugin({
+            title: "Share 'n Square | Initializing...",
+        }),
+    ],
     module: {
         rules: [
             {

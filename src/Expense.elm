@@ -2,6 +2,7 @@ module Expense exposing (..)
 
 import Amount exposing (Amount)
 import Browser.Dom as Dom
+import Config exposing (Config)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Html exposing (Html)
@@ -135,8 +136,8 @@ import_ participants expenses model =
     }
 
 
-create : Amount.Locale -> Int -> CreateModel -> Result String Expense
-create locale id model =
+create : Config -> Int -> CreateModel -> Result String Expense
+create config id model =
     -- Should probably run values though their validators...
     let
         payerResult =
@@ -148,7 +149,7 @@ create locale id model =
                     Ok payerId
 
         amountResult =
-            case model.amount.value |> Amount.fromString locale of
+            case model.amount.value |> Amount.fromString config.amount of
                 Nothing ->
                     Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
@@ -217,9 +218,10 @@ initCreate payerId receiverIds =
     }
 
 
-view : Amount.Locale -> Model -> List (Html Msg)
-view locale model =
-    [ Html.table [ class "table" ]
+view : Config -> Model -> List (Html Msg)
+view config model =
+    [ viewInstructions
+    , Html.table [ class "table" ]
         [ Html.thead []
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "#" ]
@@ -233,8 +235,6 @@ view locale model =
                     [ Html.text "Participants" ]
                 , Html.td [] []
                 ]
-
-            -- Must use keyed HTML to avoid replacement of "+" button as that breaks the tooltip.
             , Html.Keyed.node "tr" [] <|
                 [ ( "id", Html.td [] [] )
                 , ( "payer", Html.td [] [] )
@@ -251,7 +251,13 @@ view locale model =
                             |> (\htmls ->
                                     -- Ensure that there is at least 1 cell.
                                     if htmls |> List.isEmpty then
-                                        [ ( "empty", Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
+                                        -- HACK Using best-guess value for next ID as key in attempt to prevent
+                                        -- redundant removal/reinsertion of the cell containing the '+' button
+                                        -- (see 'https://github.com/elm/virtual-dom/issues/178').
+                                        -- This breaks the focus originally put on the element,
+                                        -- but due to the mutation observer also causes the tooltip to be
+                                        -- disposed and recreated for no good reason.
+                                        [ ( model.participant.nextId |> String.fromInt, Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
 
                                     else
                                         htmls
@@ -276,7 +282,15 @@ view locale model =
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
                              , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
-                             , Html.td [] [ Html.text (expense.amount |> Amount.toString locale) ]
+                             , Html.td []
+                                [ Html.span
+                                    [ data "bs-toggle" "tooltip"
+                                    , data "bs-placement" "bottom"
+                                    , Html.Attributes.title <| ((expense.amount // Dict.size expense.receivers) |> Amount.toString config.amount) ++ " per participant"
+                                    ]
+                                    [ Html.text (expense.amount |> Amount.toString config.amount)
+                                    ]
+                                ]
                              , Html.td [] [ Html.text expense.description ]
                              ]
                                 ++ List.map
@@ -295,6 +309,7 @@ view locale model =
                                         [ Html.a
                                             [ data "bs-toggle" "tooltip"
                                             , data "bs-placement" "left"
+                                            , Html.Attributes.class "text-reset"
                                             , Html.Attributes.title "Edit"
                                             , Html.Attributes.attribute "role" "button"
                                             ]
@@ -316,6 +331,17 @@ view locale model =
     , Participant.viewCreateModal model.participant |> Html.map ParticipantMsg
     , viewCreateModal model
     ]
+
+
+viewInstructions : Html msg
+viewInstructions =
+    infoBox
+        [ Html.p []
+            [ Html.text "Start by adding participants for everyone involved using the "
+            , Html.i [ class "bi bi-file-plus" ] []
+            , Html.text " button in the table's top right corner."
+            ]
+        ]
 
 
 viewCreateOpen : Model -> Html Msg
@@ -400,8 +426,8 @@ subscriptions model =
         |> Sub.batch
 
 
-update : Amount.Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update locale msg model =
+update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config msg model =
     case msg of
         LoadCreate editId ->
             let
@@ -447,7 +473,7 @@ update locale msg model =
                                         { newCreateModel
                                             | description =
                                                 { descriptionField | value = expense.description }
-                                            , amount = { amountField | value = expense.amount |> Amount.toString locale }
+                                            , amount = { amountField | value = expense.amount |> Amount.toString config.amount }
                                             , editId = editId
                                         }
             in
@@ -472,7 +498,7 @@ update locale msg model =
                         Nothing ->
                             let
                                 expense =
-                                    createModel |> create locale model.nextId
+                                    createModel |> create config model.nextId
                             in
                             case expense of
                                 Err error ->
@@ -496,7 +522,7 @@ update locale msg model =
                         Just editId ->
                             let
                                 expense =
-                                    createModel |> create locale editId
+                                    createModel |> create config editId
                             in
                             case expense of
                                 Err error ->
@@ -547,7 +573,7 @@ update locale msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = validateAmount locale amount
+                                                , feedback = validateAmountInput config.amount validateExpenseAmount amount
                                             }
                                     }
                                 )
@@ -647,18 +673,31 @@ update locale msg model =
             )
 
 
-validateAmount : Amount.Locale -> String -> Feedback
-validateAmount locale amount =
-    if amount |> String.isEmpty then
+validateAmountInput : Amount.Config -> (Amount -> Feedback) -> String -> Feedback
+validateAmountInput locale validateAmountValue input =
+    if input |> String.isEmpty then
         None
 
     else
-        case amount |> Amount.fromString locale of
+        case input |> Amount.fromString locale of
             Nothing ->
                 Error "Not a number."
 
-            Just _ ->
-                None
+            Just amount ->
+                if abs amount > Amount.max then
+                    Error "Numerical value is too large."
+
+                else
+                    validateAmountValue amount
+
+
+validateExpenseAmount : Amount -> Feedback
+validateExpenseAmount amount =
+    if amount < 0 then
+        Info "An expense with a negative amount corresponds to an evenly distributed debt or income."
+
+    else
+        None
 
 
 validateDescription : String -> Feedback

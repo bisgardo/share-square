@@ -2,6 +2,7 @@ module Payment exposing (..)
 
 import Amount exposing (Amount)
 import Browser.Dom as Dom
+import Config exposing (Config)
 import Dict exposing (Dict)
 import Expense exposing (Expense)
 import Html exposing (Html, div, text)
@@ -11,12 +12,10 @@ import Html.Keyed
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
+import List.Extra as List
 import Maybe.Extra as Maybe
 import Participant
-import Set exposing (Set)
 import Task
-import Util.JsonDecode as Decode
-import Util.List as List
 import Util.Number as Number
 import Util.Update as Update
 
@@ -34,7 +33,6 @@ type alias Model =
     , payments : List Payment
     , paymentBalance : Dict Int Amount
     , nextId : Int
-    , donePayments : Set Int
     }
 
 
@@ -43,39 +41,19 @@ type alias Payment =
     , payer : Int
     , receiver : Int
     , amount : Amount
+    , done : Bool
     }
 
 
-type alias StorageValues =
-    { payments : List Payment
-    , done : Set Int
-    }
-
-
-decoder : Decoder StorageValues
+decoder : Decoder Payment
 decoder =
-    Decode.map2
-        StorageValues
-        (Decode.field "p" <| Decode.nullableList paymentDecoder)
-        (Decode.field "d" (Decode.list Decode.int |> Decode.map Set.fromList))
-
-
-encode : StorageValues -> Value
-encode values =
-    [ ( "p", values.payments |> Encode.list encodePayment )
-    , ( "d", values.done |> Set.toList |> List.sort |> Encode.list Encode.int )
-    ]
-        |> Encode.object
-
-
-paymentDecoder : Decoder Payment
-paymentDecoder =
-    Decode.map4
-        (\id payerId amount receiverId ->
+    Decode.map5
+        (\id payerId amount receiverId done ->
             { id = id
             , payer = payerId
             , amount = amount
             , receiver = receiverId
+            , done = done
             }
         )
         -- ID
@@ -86,47 +64,42 @@ paymentDecoder =
         (Decode.field "a" Amount.decoder)
         -- receiver ID
         (Decode.field "r" Decode.int)
+        -- done?
+        (Decode.field "d" <| Decode.bool)
 
 
-encodePayment : Payment -> Value
-encodePayment payment =
+encode : Payment -> Value
+encode payment =
     [ ( "i", payment.id |> Encode.int )
     , ( "p", payment.payer |> Encode.int )
     , ( "a", payment.amount |> Amount.encode )
     , ( "r", payment.receiver |> Encode.int )
+    , ( "d", payment.done |> Encode.bool )
     ]
         |> Encode.object
 
 
-import_ : StorageValues -> Model -> Model
-import_ values model =
+import_ : List Payment -> Model -> Model
+import_ payments model =
     { model
-        | payments = values.payments
+        | payments = payments
         , paymentBalance =
-            values.payments
+            payments
                 |> List.foldl
                     (\payment -> updatePaymentBalances payment.payer payment.receiver payment.amount)
                     model.paymentBalance
         , nextId =
             1
-                + (values.payments
+                + (payments
                     |> List.foldl
                         (\payment -> max payment.id)
                         (model.nextId - 1)
                   )
-        , donePayments = values.done
     }
 
 
-export : Model -> StorageValues
-export model =
-    { payments = model.payments
-    , done = model.donePayments
-    }
-
-
-create : Amount.Locale -> Int -> CreateModel -> Result String ( Payment, Bool )
-create locale id model =
+create : Config -> Int -> CreateModel -> Result String Payment
+create config id model =
     -- Should probably run values though their validators...
     case model.payerId |> String.toInt of
         Nothing ->
@@ -142,18 +115,19 @@ create locale id model =
                         Err "payer ID must be different from receiver ID"
 
                     else
-                        case model.amount.value |> Amount.fromString locale of
+                        case model.amount.value |> Amount.fromString config.amount of
                             Nothing ->
                                 Err <| "cannot parse amount '" ++ model.amount.value ++ "' as a (floating point) number"
 
                             Just amount ->
                                 Ok
-                                    ( { id = id
-                                      , payer = payerId
-                                      , receiver = receiverId
-                                      , amount = amount
-                                      }
-                                    , model.done
+                                    ({ id = id
+                                     , payer = payerId
+                                     , receiver = receiverId
+                                     , amount = amount
+                                     , done = model.done
+                                     }
+                                        |> normalizePayment
                                     )
 
 
@@ -163,7 +137,6 @@ init =
       , payments = []
       , paymentBalance = Dict.empty
       , nextId = 1
-      , donePayments = Set.empty
       }
     , Cmd.none
     )
@@ -192,6 +165,14 @@ type alias CreateModel =
     }
 
 
+{-| Tuple of receiver ID, amount, and ID of existing payment to amend.
+The payment ID is represented as a pair of the ID and a boolean indicating
+whether the amount should be added (false) or subtracted (true).
+-}
+type alias SuggestedPayment =
+    ( Int, Amount, Maybe ( Int, Bool ) )
+
+
 type Msg
     = LoadCreate (List Int)
     | CloseModal
@@ -201,16 +182,15 @@ type Msg
     | CreateSetDone Bool
     | CreateApplySuggestedAmount Amount
     | CreateSubmit
-    | Delete Int
-    | ApplySuggestedPayment Int Int Amount
-    | ApplyAllSuggestedPayments (Dict Int (List ( Int, Amount )))
+    | Delete (List Int)
+    | ApplySuggestedPayments (Dict Int (List SuggestedPayment))
     | SetDone Int Bool
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
 
 
-view : Amount.Locale -> Participant.Model -> Model -> List (Html Msg)
-view locale participantModel model =
+view : Config -> Participant.Model -> Model -> List (Html Msg)
+view config participantModel model =
     [ Html.table [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
@@ -218,7 +198,25 @@ view locale participantModel model =
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
-                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Done" ]
+                , Html.th [ Html.Attributes.scope "col" ] <|
+                    [ Html.text "Done"
+                    , let
+                        plannedPayments =
+                            model.payments |> List.filterNot .done
+                      in
+                      Html.button
+                        [ Html.Attributes.class <|
+                            "ms-1 badge btn btn-primary"
+                                ++ (if plannedPayments |> List.isEmpty then
+                                        " invisible"
+
+                                    else
+                                        ""
+                                   )
+                        , Html.Events.onClick <| Delete (plannedPayments |> List.map .id)
+                        ]
+                        [ Html.text "delete all planned" ]
+                    ]
                 , Html.th [] []
                 ]
             ]
@@ -236,39 +234,42 @@ view locale participantModel model =
                             [ Html.td [] [ Html.text id ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
                             , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
-                            , Html.td [] [ Html.text (payment.amount |> Amount.toString locale) ]
+                            , Html.td [] [ Html.text (payment.amount |> Amount.toString config.amount) ]
                             , Html.td []
                                 [ Html.input
                                     [ Html.Attributes.type_ "checkbox"
                                     , Html.Attributes.class "form-check-input"
-                                    , Html.Attributes.checked (model.donePayments |> Set.member payment.id)
+                                    , Html.Attributes.checked payment.done
                                     , Html.Events.onCheck (SetDone payment.id)
                                     ]
                                     []
                                 ]
                             , Html.td
                                 [ Html.Attributes.align "right" ]
-                                (if model.donePayments |> Set.member payment.id then
-                                    []
+                                [ Html.a
+                                    [ data "bs-toggle" "tooltip"
+                                    , data "bs-placement" "left"
+                                    , Html.Attributes.class <|
+                                        "text-reset"
+                                            ++ (if payment.done then
+                                                    " invisible"
 
-                                 else
-                                    [ Html.a
-                                        [ data "bs-toggle" "tooltip"
-                                        , data "bs-placement" "left"
-                                        , Html.Attributes.title "Delete"
-                                        , Html.Attributes.attribute "role" "button"
-                                        , Html.Events.onClick (Delete payment.id)
-                                        ]
-                                        [ Html.i [ Html.Attributes.class "bi bi-trash" ] [] ]
+                                                else
+                                                    ""
+                                               )
+                                    , Html.Attributes.title "Delete"
+                                    , Html.Attributes.attribute "role" "button"
+                                    , Html.Events.onClick <| Delete [ payment.id ]
                                     ]
-                                )
+                                    [ Html.i [ Html.Attributes.class "bi bi-trash" ] [] ]
+                                ]
                             ]
                         )
                     )
             )
         ]
     , viewCreateOpen participantModel
-    , viewCreateModal locale participantModel model
+    , viewCreateModal config participantModel model
     ]
 
 
@@ -284,8 +285,8 @@ viewCreateOpen participantModel =
         ]
 
 
-viewCreateModal : Amount.Locale -> Participant.Model -> Model -> Html Msg
-viewCreateModal locale participantModel model =
+viewCreateModal : Config -> Participant.Model -> Model -> Html Msg
+viewCreateModal config participantModel model =
     let
         ( body, disable ) =
             case model.create of
@@ -293,7 +294,7 @@ viewCreateModal locale participantModel model =
                     ( [ Html.text "Loading..." ], True )
 
                 Just createModel ->
-                    ( viewAdd locale participantModel createModel
+                    ( viewAdd config participantModel createModel
                     , String.isEmpty createModel.amount.value
                         || createModel.payerId
                         == createModel.receiverId
@@ -305,8 +306,8 @@ viewCreateModal locale participantModel model =
         [ modal createModalId "Add payment" body disable Nothing ]
 
 
-viewAdd : Amount.Locale -> Participant.Model -> CreateModel -> List (Html Msg)
-viewAdd locale participantModel model =
+viewAdd : Config -> Participant.Model -> CreateModel -> List (Html Msg)
+viewAdd config participantModel model =
     let
         participantsFields =
             participantModel.participants
@@ -339,7 +340,7 @@ viewAdd locale participantModel model =
                     Ok amount ->
                         ( None
                         , None
-                        , if amount == (model.amount.value |> Amount.fromString locale |> Maybe.withDefault 0) then
+                        , if amount == (model.amount.value |> Amount.fromString config.amount |> Maybe.withDefault 0) then
                             -- Amount is already the suggested value.
                             Nothing
 
@@ -375,7 +376,7 @@ viewAdd locale participantModel model =
                 Just amount ->
                     [ Layout.internalLink
                         (CreateApplySuggestedAmount amount)
-                        [ text <| "Balance difference: " ++ (amount |> Amount.toString locale) ]
+                        [ text <| "Balance difference: " ++ (amount |> Amount.toString config.amount) ]
                     ]
         ]
     , textInput "Amount" model.amount CreateEditAmount
@@ -406,8 +407,8 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : Amount.Locale -> Maybe (Dict Int Amount) -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update locale balances msg model =
+update : Config -> Maybe (Dict Int Amount) -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config balances msg model =
     case msg of
         LoadCreate participants ->
             let
@@ -463,7 +464,7 @@ update locale balances msg model =
               )
             , Cmd.none
             )
-                |> Update.chains (Update.withPairModel (update locale balances) (||))
+                |> Update.chains (Update.withPairModel (update config balances) (||))
                     ((case firstNegativeBalanceParticipant |> Maybe.orElse firstParticipantFallback of
                         Nothing ->
                             []
@@ -545,7 +546,7 @@ update locale balances msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = Expense.validateAmount locale amount
+                                                , feedback = Expense.validateAmountInput config.amount validatePaymentAmount amount
                                             }
                                     }
                                 )
@@ -565,8 +566,8 @@ update locale balances msg model =
                     createModel.amount.key |> Dom.focus |> Task.attempt DomMsg
             )
                 |> Update.chain
-                    (update locale balances)
-                    (amount |> Amount.toString locale |> CreateEditAmount)
+                    (update config balances)
+                    (amount |> Amount.toString config.amount |> CreateEditAmount)
 
         CreateSetDone done ->
             ( ( { model
@@ -588,7 +589,7 @@ update locale balances msg model =
                 result =
                     model.create
                         |> Result.fromMaybe "no create model found"
-                        |> Result.andThen (create locale id)
+                        |> Result.andThen (create config id)
             in
             case result of
                 Err error ->
@@ -599,91 +600,110 @@ update locale balances msg model =
                     in
                     ( ( model, False ), Cmd.none )
 
-                Ok ( payment, done ) ->
-                    ( ( model |> addPayments [ payment ] done (id + 1), True )
-                    , Update.delegate CloseModal
-                    )
-
-        Delete paymentId ->
-            case model.payments |> List.withoutFirstMatch (.id >> (==) paymentId) of
-                ( Nothing, _ ) ->
-                    -- Should never happen.
-                    let
-                        _ =
-                            Debug.log "error" <| "Cannot delete payment with non-existent ID '" ++ (paymentId |> String.fromInt) ++ "'."
-                    in
-                    ( ( model, False ), Cmd.none )
-
-                ( Just payment, newPayments ) ->
-                    let
-                        paymentBalance =
-                            model.paymentBalance
-                                |> updatePaymentBalances payment.receiver payment.payer payment.amount
-                    in
+                Ok payment ->
                     ( ( { model
-                            | payments = newPayments
-                            , paymentBalance = paymentBalance
-
-                            -- Technically required even if currently redundant as deletion isn't exposed to done payments.
-                            , donePayments = model.donePayments |> Set.remove paymentId
+                            | payments =
+                                model.payments ++ [ payment ]
+                            , paymentBalance =
+                                model.paymentBalance
+                                    |> updatePaymentBalances payment.payer
+                                        payment.receiver
+                                        payment.amount
+                            , nextId = id + 1
                         }
                       , True
                       )
-                    , createModalOpenId |> Dom.focus |> Task.attempt DomMsg
+                    , Update.delegate CloseModal
                     )
 
-        ApplySuggestedPayment payerId receiverId amount ->
-            ( ( model
-                    |> addPayments
-                        [ { id = model.nextId
-                          , payer = payerId
-                          , receiver = receiverId
-                          , amount = amount
-                          }
-                        ]
-                        False
-                        (model.nextId + 1)
+        Delete paymentIds ->
+            let
+                ( deletedPayments, retainedPayments ) =
+                    model.payments
+                        |> List.partition (\payment -> List.member payment.id paymentIds)
+            in
+            ( ( { model
+                    | payments = retainedPayments
+                    , paymentBalance =
+                        deletedPayments
+                            |> List.foldl
+                                (\deletedPayment ->
+                                    updatePaymentBalances deletedPayment.receiver deletedPayment.payer deletedPayment.amount
+                                )
+                                model.paymentBalance
+                }
               , True
               )
-            , Cmd.none
+            , createModalOpenId |> Dom.focus |> Task.attempt DomMsg
             )
 
-        ApplyAllSuggestedPayments suggestedPayments ->
+        ApplySuggestedPayments suggestedPayments ->
             let
-                ( paymentsReversed, nextId ) =
+                modelResult =
                     suggestedPayments
                         |> Dict.foldl
-                            (\payerId payerSuggestedPayments ( payerPaymentsReversed, payerNextId ) ->
+                            (\payerId payerSuggestedPayments outerModelResult ->
                                 payerSuggestedPayments
                                     |> List.foldl
-                                        (\( receiverId, amount ) ( receiverPayments, receiverNextId ) ->
-                                            ( { id = receiverNextId
-                                              , payer = payerId
-                                              , receiver = receiverId
-                                              , amount = amount
-                                              }
-                                                :: receiverPayments
-                                            , receiverNextId + 1
-                                            )
+                                        (\( receiverId, amount, existingPaymentId ) innerModelResult ->
+                                            case existingPaymentId of
+                                                Nothing ->
+                                                    { innerModelResult
+                                                        | payments =
+                                                            innerModelResult.payments
+                                                                ++ [ { id = innerModelResult.nextId
+                                                                     , payer = payerId
+                                                                     , receiver = receiverId
+                                                                     , amount = amount
+                                                                     , done = False
+                                                                     }
+                                                                        |> normalizePayment
+                                                                   ]
+                                                        , paymentBalance =
+                                                            innerModelResult.paymentBalance
+                                                                |> updatePaymentBalances
+                                                                    payerId
+                                                                    receiverId
+                                                                    amount
+                                                        , nextId = innerModelResult.nextId + 1
+                                                    }
+
+                                                Just ( paymentId, inverse ) ->
+                                                    { innerModelResult
+                                                        | payments =
+                                                            innerModelResult.payments
+                                                                |> List.updateIf (.id >> (==) paymentId)
+                                                                    (\payment ->
+                                                                        { payment
+                                                                            | amount =
+                                                                                if inverse then
+                                                                                    payment.amount - amount
+
+                                                                                else
+                                                                                    payment.amount + amount
+                                                                        }
+                                                                            |> normalizePayment
+                                                                    )
+                                                        , paymentBalance =
+                                                            innerModelResult.paymentBalance
+                                                                |> updatePaymentBalances
+                                                                    payerId
+                                                                    receiverId
+                                                                    amount
+                                                        , nextId = innerModelResult.nextId + 1
+                                                    }
                                         )
-                                        ( payerPaymentsReversed, payerNextId )
+                                        outerModelResult
                             )
-                            ( [], model.nextId )
+                            model
             in
-            ( ( model |> addPayments (paymentsReversed |> List.reverse) False nextId, True ), Cmd.none )
+            ( ( modelResult, True ), Cmd.none )
 
         SetDone paymentId done ->
             ( ( { model
-                    | donePayments =
-                        let
-                            updateSet =
-                                if done then
-                                    Set.insert
-
-                                else
-                                    Set.remove
-                        in
-                        model.donePayments |> updateSet paymentId
+                    | payments =
+                        model.payments
+                            |> List.updateIf (.id >> (==) paymentId) (\payment -> { payment | done = done })
                 }
               , True
               )
@@ -713,26 +733,26 @@ update locale balances msg model =
             ( ( model, False ), Cmd.none )
 
 
-addPayments : List Payment -> Bool -> Int -> Model -> Model
-addPayments payments done nextId model =
-    { model
-        | payments = model.payments ++ payments
-        , paymentBalance =
-            payments
-                |> List.foldl
-                    (\payment paymentBalance ->
-                        paymentBalance
-                            |> updatePaymentBalances payment.payer payment.receiver payment.amount
-                    )
-                    model.paymentBalance
-        , nextId = nextId
-        , donePayments =
-            if done then
-                payments |> List.foldl (.id >> Set.insert) model.donePayments
+normalizePayment : Payment -> Payment
+normalizePayment result =
+    if result.amount < 0 then
+        { result
+            | payer = result.receiver
+            , receiver = result.payer
+            , amount = -result.amount
+        }
 
-            else
-                model.donePayments
-    }
+    else
+        result
+
+
+validatePaymentAmount : Amount -> Feedback
+validatePaymentAmount amount =
+    if amount < 0 then
+        Info "Payments with negative amounts will swap payer and receiver."
+
+    else
+        None
 
 
 findSuggestedPayment : Dict Int Amount -> Maybe ( ( Int, Amount ), ( Int, Amount ) )

@@ -8,5 +8,4 @@ COPY . .
 RUN npm run build
 
 FROM nginx:stable-alpine
-COPY ./index.html /usr/share/nginx/html/index.html
-COPY --from=build /build/dist/app.js /usr/share/nginx/html/app.js
+COPY --from=build /build/dist /usr/share/nginx/html

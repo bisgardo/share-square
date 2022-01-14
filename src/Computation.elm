@@ -1,6 +1,7 @@
 module Computation exposing (..)
 
 import Amount exposing (Amount)
+import Config exposing (Config)
 import Dict exposing (Dict)
 import Expense exposing (Expense)
 import Html exposing (Html, div, text)
@@ -10,7 +11,7 @@ import Html.Keyed
 import Layout
 import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
-import Payment
+import Payment exposing (Payment)
 import Util.Dict as Dict
 import Util.Maybe as Maybe
 
@@ -38,11 +39,11 @@ type alias ComputedModel =
     { expenses : Expenses
     , debts : Expenses
     , balance : Dict Int Amount
-    , suggestedPayments : Dict Int (List ( Int, Amount ))
+    , suggestedPayments : Dict Int (List Payment.SuggestedPayment)
     }
 
 
-import_ : Payment.StorageValues -> Model -> Model
+import_ : List Payment -> Model -> Model
 import_ payments model =
     { model
         | computed = Nothing
@@ -56,37 +57,45 @@ type Msg
     | PaymentMsg Payment.Msg
 
 
-view : Amount.Locale -> Participant.Model -> Model -> Html Msg
-view locale participantModel model =
+view : Config -> Participant.Model -> Model -> Html Msg
+view config participantModel model =
     div [ Html.Attributes.class "col" ] <|
         [ Html.h3 [] [ text "Balances" ]
-        , viewBalances locale participantModel.idToName model
+        , viewBalanceInstructions
+        , viewBalances config participantModel.idToName model
         , Html.h3 [] [ text "Payments" ]
+        , viewPaymentsInstructions
         ]
-            ++ (Payment.view locale participantModel model.payment |> List.map (Html.map PaymentMsg))
+            ++ (Payment.view config participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
-viewBalances : Amount.Locale -> Dict Int String -> Model -> Html Msg
-viewBalances locale participants model =
-    Html.table [ Html.Attributes.class "table" ]
+viewBalances : Config -> Dict Int String -> Model -> Html Msg
+viewBalances config participants model =
+    Html.table
+        [ Html.Attributes.class "table" ]
         [ Html.thead []
             [ Html.tr []
                 [ Html.th [ Html.Attributes.scope "col" ] [ Html.text "Participant" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Balance" ]
-                , Html.th [ Html.Attributes.scope "col" ] <|
-                    [ Html.text "Suggested payments" ]
-                        ++ (case model.computed |> Maybe.map .suggestedPayments |> Maybe.nothingIf Dict.isEmpty of
-                                Nothing ->
-                                    []
+                , Html.th [ Html.Attributes.scope "col" ]
+                    [ Html.text "Suggested payments"
+                    , let
+                        suggestedPayments =
+                            model.computed |> Maybe.map .suggestedPayments |> Maybe.withDefault Dict.empty
+                      in
+                      Html.button
+                        [ Html.Attributes.class <|
+                            "ms-1 badge btn btn-primary"
+                                ++ (if suggestedPayments |> Dict.isEmpty then
+                                        " invisible"
 
-                                Just suggestedPayments ->
-                                    [ Html.button
-                                        [ Html.Attributes.class "ms-1 badge btn btn-primary"
-                                        , Html.Events.onClick (Payment.ApplyAllSuggestedPayments suggestedPayments |> PaymentMsg)
-                                        ]
-                                        [ Html.text "apply all" ]
-                                    ]
-                           )
+                                    else
+                                        ""
+                                   )
+                        , Html.Events.onClick (Payment.ApplySuggestedPayments suggestedPayments |> PaymentMsg)
+                        ]
+                        [ Html.text "apply all" ]
+                    ]
                 ]
             ]
         , Html.Keyed.node "tbody"
@@ -132,35 +141,52 @@ viewBalances locale participants model =
                                                 "text-decoration-line-through"
                                         ]
                                         [ Html.td [] [ text participantName ]
-                                        , Html.td [] [ text (amount |> Amount.toStringSigned locale) ]
+                                        , Html.td [] [ text (amount |> Amount.toStringSigned "+" config.amount) ]
                                         , Html.td []
                                             (computed.suggestedPayments
                                                 |> Dict.get participantId
                                                 |> Maybe.unwrap []
                                                     (List.map
-                                                        (\( receiverId, suggestedAmount ) ->
+                                                        (\( receiverId, suggestedAmount, payment ) ->
                                                             ( participants |> Participant.lookupName receiverId
                                                             , receiverId
-                                                            , suggestedAmount
+                                                            , ( suggestedAmount, payment )
                                                             )
                                                         )
                                                         -- Sort by name, then ID.
-                                                        >> List.sort
+                                                        >> List.sortBy (\( receiverName, receiverId, _ ) -> ( receiverName, receiverId ))
                                                         >> List.map
-                                                            (\( receiverName, receiverId, suggestedAmount ) ->
+                                                            (\( receiverName, receiverId, ( suggestedAmount, payment ) ) ->
                                                                 div []
                                                                     [ Layout.internalLink
-                                                                        (Payment.ApplySuggestedPayment
-                                                                            participantId
-                                                                            receiverId
-                                                                            suggestedAmount
+                                                                        (Payment.ApplySuggestedPayments
+                                                                            (Dict.singleton participantId [ ( receiverId, suggestedAmount, payment ) ])
                                                                             |> PaymentMsg
                                                                         )
                                                                         [ Html.text <|
-                                                                            "Pay "
-                                                                                ++ Amount.toString locale suggestedAmount
-                                                                                ++ " to "
-                                                                                ++ receiverName
+                                                                            case payment of
+                                                                                Nothing ->
+                                                                                    "Pay "
+                                                                                        ++ Amount.toString config.amount suggestedAmount
+                                                                                        ++ " to "
+                                                                                        ++ receiverName
+
+                                                                                Just ( paymentId, inverse ) ->
+                                                                                    if inverse then
+                                                                                        "Receive "
+                                                                                            ++ Amount.toString config.amount suggestedAmount
+                                                                                            ++ " less from "
+                                                                                            ++ receiverName
+                                                                                            ++ " in payment #"
+                                                                                            ++ String.fromInt paymentId
+
+                                                                                    else
+                                                                                        "Pay additional "
+                                                                                            ++ Amount.toString config.amount suggestedAmount
+                                                                                            ++ " to "
+                                                                                            ++ receiverName
+                                                                                            ++ " in payment #"
+                                                                                            ++ String.fromInt paymentId
                                                                         ]
                                                                     ]
                                                             )
@@ -171,6 +197,27 @@ viewBalances locale participants model =
                                 )
                     )
             )
+        ]
+
+
+viewBalanceInstructions : Html msg
+viewBalanceInstructions =
+    Layout.infoBox
+        [ Html.p []
+            [ Html.text "The suggested payments provide one possible set of payments that would make all the participants square. Click a suggested payment to \"apply\" it, i.e. add it to the payment component below."
+            ]
+        ]
+
+
+viewPaymentsInstructions : Html msg
+viewPaymentsInstructions =
+    Layout.infoBox
+        [ Html.p []
+            [ Html.text "Payments are most easily added by applying suggestions from the table above. If, for whatever reason (like cash is involved), a certain payment is particularly convenient, it may be added manually below. The balances and suggestions above will adjust accordingly."
+            ]
+        , Html.p []
+            [ Html.text "Once a payment has actually been done, it may be marked as such to prevent it from being deleted or modified. Deleting planned payments is useful when expenses are added after the balances have been squared."
+            ]
         ]
 
 
@@ -248,8 +295,30 @@ subscriptions =
     .payment >> Payment.subscriptions >> Sub.map PaymentMsg
 
 
-update : Amount.Locale -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update locale msg model =
+findExistingPaymentId : Int -> Int -> List Payment -> Maybe ( Int, Bool )
+findExistingPaymentId payerId receiverId payments =
+    case payments of
+        [] ->
+            Nothing
+
+        existingPayment :: remainingExistingPayments ->
+            if not existingPayment.done && existingPayment.payer == payerId && existingPayment.receiver == receiverId then
+                Just ( existingPayment.id, False )
+
+            else if not existingPayment.done && existingPayment.payer == receiverId && existingPayment.receiver == payerId then
+                Just ( existingPayment.id, True )
+
+            else
+                findExistingPaymentId payerId receiverId remainingExistingPayments
+
+
+withExistingPaymentId : List Payment -> Int -> ( Int, Amount ) -> Payment.SuggestedPayment
+withExistingPaymentId existingPayments payerId ( receiverId, amount ) =
+    ( receiverId, amount, findExistingPaymentId payerId receiverId existingPayments )
+
+
+update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config msg model =
     case msg of
         Disable ->
             ( ( { model | computed = Nothing }, False ), Cmd.none )
@@ -286,6 +355,7 @@ update locale msg model =
                                 , suggestedPayments =
                                     -- The result value of sumValues only contains keys from the first argument.
                                     Payment.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
+                                        |> Dict.map (\payerId -> List.map (withExistingPaymentId model.payment.payments payerId))
                                 }
                     }
                   , False
@@ -296,7 +366,7 @@ update locale msg model =
         PaymentMsg paymentMsg ->
             let
                 ( ( paymentModel, modelChanged ), paymentCmd ) =
-                    model.payment |> Payment.update locale (model.computed |> Maybe.map .balance) paymentMsg
+                    model.payment |> Payment.update config (model.computed |> Maybe.map .balance) paymentMsg
             in
             ( ( { model
                     | payment = paymentModel
@@ -308,6 +378,7 @@ update locale msg model =
                                         { computed
                                             | suggestedPayments =
                                                 Payment.autosuggestPayments (Dict.sumValues computed.balance paymentModel.paymentBalance)
+                                                    |> Dict.map (\payerId -> List.map (withExistingPaymentId paymentModel.payments payerId))
                                         }
                                     )
 
