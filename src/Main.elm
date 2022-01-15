@@ -4,7 +4,7 @@ import Amount
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Config exposing (Config)
-import Domain exposing (Expense, Participant, Payment, encodeExpense, encodeParticipant, encodePayment, expenseDecoder, participantDecoder, paymentDecoder)
+import Domain exposing (Expense, Participant, Payment)
 import Expense
 import Html exposing (Html)
 import Html.Attributes
@@ -136,20 +136,20 @@ storageValuesDecoder =
     Decode.map4
         StorageValues
         -- participants
-        (Decode.field "p" <| Decode.nullableList participantDecoder)
+        (Decode.field "p" <| Decode.nullableList Domain.participantDecoder)
         -- expenses
-        (Decode.field "e" <| Decode.nullableList expenseDecoder)
+        (Decode.field "e" <| Decode.nullableList Domain.expenseDecoder)
         -- payments
-        (Decode.field "y" <| Decode.nullableList paymentDecoder)
+        (Decode.field "y" <| Decode.nullableList Domain.paymentDecoder)
         -- config
         (Decode.field "c" <| storageConfigDecoder)
 
 
 encodeStorageValues : StorageValues -> Value
 encodeStorageValues values =
-    [ ( "p", values.participants |> Encode.list encodeParticipant )
-    , ( "e", values.expenses |> Encode.list encodeExpense )
-    , ( "y", values.payments |> Encode.list encodePayment )
+    [ ( "p", values.participants |> Encode.list Domain.encodeParticipant )
+    , ( "e", values.expenses |> Encode.list Domain.encodeExpense )
+    , ( "y", values.payments |> Encode.list Domain.encodePayment )
     , ( "c", values.config |> encodeStorageConfig )
     ]
         |> Encode.object

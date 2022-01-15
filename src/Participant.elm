@@ -1,7 +1,7 @@
 module Participant exposing (..)
 
 import Dict exposing (Dict)
-import Domain exposing (Participant, newParticipant)
+import Domain exposing (Participant)
 import Html exposing (Html, text)
 import Html.Attributes
 import Html.Events exposing (onSubmit)
@@ -230,7 +230,7 @@ create id name =
         Err "cannot create participant with empty name"
 
     else
-        Ok <| newParticipant id (name |> cleanName)
+        Ok <| Domain.newParticipant id (name |> cleanName)
 
 
 cleanName : String -> String

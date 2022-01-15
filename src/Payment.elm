@@ -4,7 +4,7 @@ import Amount exposing (Amount)
 import Browser.Dom as Dom
 import Config exposing (Config)
 import Dict exposing (Dict)
-import Domain exposing (Payment, lookupBalance, normalizePayment, suggestPaymentAmount, updatePaymentBalances)
+import Domain exposing (Payment)
 import Expense
 import Html exposing (Html, div, text)
 import Html.Attributes
@@ -42,7 +42,7 @@ import_ payments model =
         , paymentBalance =
             payments
                 |> List.foldl
-                    (\payment -> updatePaymentBalances payment.payer payment.receiver payment.amount)
+                    (\payment -> Domain.updatePaymentBalances payment.payer payment.receiver payment.amount)
                     model.paymentBalance
         , nextId =
             1
@@ -83,7 +83,7 @@ create config id model =
                                      , amount = amount
                                      , done = model.done
                                      }
-                                        |> normalizePayment
+                                        |> Domain.normalizePayment
                                     )
 
 
@@ -387,7 +387,7 @@ update config balances msg model =
                                     (\participantId participantBalance ( negativeResult, positiveResult ) ->
                                         let
                                             totalBalance =
-                                                participantBalance + lookupBalance participantId model.paymentBalance
+                                                participantBalance + Domain.lookupBalance participantId model.paymentBalance
 
                                             updateResult isValid result =
                                                 case result of
@@ -451,7 +451,7 @@ update config balances msg model =
                                         , suggestedAmount =
                                             balances
                                                 |> Maybe.unwrap (Err ( Nothing, Nothing ))
-                                                    (suggestPaymentAmount
+                                                    (Domain.suggestPaymentAmount
                                                         payerId
                                                         createModel.receiverId
                                                         model.paymentBalance
@@ -475,7 +475,7 @@ update config balances msg model =
                                         , suggestedAmount =
                                             balances
                                                 |> Maybe.unwrap (Err ( Nothing, Nothing ))
-                                                    (suggestPaymentAmount
+                                                    (Domain.suggestPaymentAmount
                                                         createModel.payerId
                                                         receiverId
                                                         model.paymentBalance
@@ -562,7 +562,7 @@ update config balances msg model =
                                 model.payments ++ [ payment ]
                             , paymentBalance =
                                 model.paymentBalance
-                                    |> updatePaymentBalances payment.payer
+                                    |> Domain.updatePaymentBalances payment.payer
                                         payment.receiver
                                         payment.amount
                             , nextId = id + 1
@@ -584,7 +584,7 @@ update config balances msg model =
                         deletedPayments
                             |> List.foldl
                                 (\deletedPayment ->
-                                    updatePaymentBalances deletedPayment.receiver deletedPayment.payer deletedPayment.amount
+                                    Domain.updatePaymentBalances deletedPayment.receiver deletedPayment.payer deletedPayment.amount
                                 )
                                 model.paymentBalance
                 }
@@ -613,11 +613,11 @@ update config balances msg model =
                                                                      , amount = amount
                                                                      , done = False
                                                                      }
-                                                                        |> normalizePayment
+                                                                        |> Domain.normalizePayment
                                                                    ]
                                                         , paymentBalance =
                                                             innerModelResult.paymentBalance
-                                                                |> updatePaymentBalances
+                                                                |> Domain.updatePaymentBalances
                                                                     payerId
                                                                     receiverId
                                                                     amount
@@ -638,11 +638,11 @@ update config balances msg model =
                                                                                 else
                                                                                     payment.amount + amount
                                                                         }
-                                                                            |> normalizePayment
+                                                                            |> Domain.normalizePayment
                                                                     )
                                                         , paymentBalance =
                                                             innerModelResult.paymentBalance
-                                                                |> updatePaymentBalances
+                                                                |> Domain.updatePaymentBalances
                                                                     payerId
                                                                     receiverId
                                                                     amount
