@@ -1,0 +1,26 @@
+name: Build
+
+on:
+  push:
+    paths: '**.elm'
+
+jobs:
+  elm-format:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [ '14', '16' ] 
+    steps:
+      # TODO Cache dependencies.
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run formatter
+        run: npx elm-format --validate ./src
+      - name: Run build
+        run: npm run build
