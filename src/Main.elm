@@ -1,10 +1,11 @@
 module Main exposing (main)
 
-import Amount
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Config exposing (Config)
-import Domain exposing (Expense, Participant, Payment)
+import Domain.Expense as Expense exposing (Expense)
+import Domain.Participant as Participant exposing (Participant)
+import Domain.Payment as Payment exposing (Payment)
 import Expense
 import Html exposing (Html)
 import Html.Attributes
@@ -136,20 +137,20 @@ storageValuesDecoder =
     Decode.map4
         StorageValues
         -- participants
-        (Decode.field "p" <| Decode.nullableList Domain.participantDecoder)
+        (Decode.field "p" <| Decode.nullableList Participant.decoder)
         -- expenses
-        (Decode.field "e" <| Decode.nullableList Domain.expenseDecoder)
+        (Decode.field "e" <| Decode.nullableList Expense.decoder)
         -- payments
-        (Decode.field "y" <| Decode.nullableList Domain.paymentDecoder)
+        (Decode.field "y" <| Decode.nullableList Payment.decoder)
         -- config
         (Decode.field "c" <| storageConfigDecoder)
 
 
 encodeStorageValues : StorageValues -> Value
 encodeStorageValues values =
-    [ ( "p", values.participants |> Encode.list Domain.encodeParticipant )
-    , ( "e", values.expenses |> Encode.list Domain.encodeExpense )
-    , ( "y", values.payments |> Encode.list Domain.encodePayment )
+    [ ( "p", values.participants |> Encode.list Participant.encode )
+    , ( "e", values.expenses |> Encode.list Expense.encode )
+    , ( "y", values.payments |> Encode.list Payment.encode )
     , ( "c", values.config |> encodeStorageConfig )
     ]
         |> Encode.object

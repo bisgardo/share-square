@@ -1,11 +1,12 @@
 module Expense exposing (..)
 
-import Amount exposing (Amount)
 import Browser.Dom as Dom
 import Config exposing (Config)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
-import Domain exposing (Expense, Participant)
+import Domain.Amount as Amount exposing (Amount)
+import Domain.Expense as Expense exposing (Expense)
+import Domain.Participant exposing (Participant)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events

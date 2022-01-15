@@ -1,9 +1,11 @@
 module Settlement exposing (..)
 
-import Amount exposing (Amount)
 import Config exposing (Config)
 import Dict exposing (Dict)
-import Domain exposing (Expense, Payment)
+import Domain.Amount as Amount exposing (Amount)
+import Domain.Expense exposing (Expense)
+import Domain.Payment exposing (Payment)
+import Domain.Suggestion as Suggestion
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
@@ -353,7 +355,7 @@ update config msg model =
                                 , balance = balance
                                 , suggestedPayments =
                                     -- The result value of sumValues only contains keys from the first argument.
-                                    Domain.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
+                                    Suggestion.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
                                         |> Dict.map (\payerId -> List.map (withExistingPaymentId model.payment.payments payerId))
                                 }
                     }
@@ -376,7 +378,7 @@ update config msg model =
                                     (\computed ->
                                         { computed
                                             | suggestedPayments =
-                                                Domain.autosuggestPayments (Dict.sumValues computed.balance paymentModel.paymentBalance)
+                                                Suggestion.autosuggestPayments (Dict.sumValues computed.balance paymentModel.paymentBalance)
                                                     |> Dict.map (\payerId -> List.map (withExistingPaymentId paymentModel.payments payerId))
                                         }
                                     )
