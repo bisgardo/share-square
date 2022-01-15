@@ -4,7 +4,7 @@ import Amount exposing (Amount)
 import Browser.Dom as Dom
 import Config exposing (Config)
 import Dict exposing (Dict)
-import Domain exposing (Payment)
+import Domain exposing (Balances, Payment)
 import Expense
 import Html exposing (Html, div, text)
 import Html.Attributes
@@ -451,7 +451,7 @@ update config balances msg model =
                                         , suggestedAmount =
                                             balances
                                                 |> Maybe.unwrap (Err ( Nothing, Nothing ))
-                                                    (Domain.suggestPaymentAmount
+                                                    (suggestPaymentAmount
                                                         payerId
                                                         createModel.receiverId
                                                         model.paymentBalance
@@ -475,7 +475,7 @@ update config balances msg model =
                                         , suggestedAmount =
                                             balances
                                                 |> Maybe.unwrap (Err ( Nothing, Nothing ))
-                                                    (Domain.suggestPaymentAmount
+                                                    (suggestPaymentAmount
                                                         createModel.payerId
                                                         receiverId
                                                         model.paymentBalance
@@ -696,3 +696,10 @@ validatePaymentAmount amount =
 
     else
         None
+
+
+suggestPaymentAmount : String -> String -> Balances -> Balances -> Result ( Maybe Int, Maybe Int ) Amount
+suggestPaymentAmount payer receiver =
+    Domain.suggestPaymentAmount
+        (payer |> String.toInt |> Maybe.withDefault 0)
+        (receiver |> String.toInt |> Maybe.withDefault 0)

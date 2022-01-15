@@ -160,8 +160,26 @@ normalizePayment result =
         result
 
 
-findSuggestedPayment : Dict Int Amount -> Maybe ( ( Int, Amount ), ( Int, Amount ) )
-findSuggestedPayment =
+
+-- BALANCE --
+
+
+type alias Balances =
+    Dict Int Amount
+
+
+sumBalances : Int -> Balances -> Balances -> Amount
+sumBalances participantId paymentBalance balance =
+    (balance |> lookupBalance participantId) + (paymentBalance |> lookupBalance participantId)
+
+
+lookupBalance : Int -> Balances -> Amount
+lookupBalance participantId =
+    Dict.get participantId >> Maybe.withDefault 0
+
+
+findExtremaBalanceParticipants : Balances -> Maybe ( ( Int, Amount ), ( Int, Amount ) )
+findExtremaBalanceParticipants =
     Dict.foldl
         (\participantId participantBalance result ->
             case result of
@@ -181,7 +199,11 @@ findSuggestedPayment =
         Nothing
 
 
-autosuggestPayments : Dict Int Amount -> Dict Int (List ( Int, Amount ))
+
+-- SUGGESTED PAYMENTS --
+
+
+autosuggestPayments : Balances -> Dict Int (List ( Int, Amount ))
 autosuggestPayments totalBalances =
     case totalBalances |> autosuggestPayment of
         Nothing ->
@@ -198,16 +220,15 @@ autosuggestPayments totalBalances =
                     )
 
 
-autosuggestPayment : Dict Int Amount -> Maybe ( Int, Int, Amount )
+autosuggestPayment : Balances -> Maybe ( Int, Int, Amount )
 autosuggestPayment =
-    findSuggestedPayment
+    findExtremaBalanceParticipants
         >> Maybe.andThen
             (\( ( minParticipant, minBalance ), ( maxParticipant, maxBalance ) ) ->
                 let
                     debt =
                         min maxBalance -minBalance
                 in
-                -- TODO Should really do if |debt| < epsilon?
                 if debt == 0 then
                     Nothing
 
@@ -216,25 +237,9 @@ autosuggestPayment =
             )
 
 
-sumBalances : Int -> Dict Int Amount -> Dict Int Amount -> Amount
-sumBalances participantId paymentBalance balance =
-    (balance |> lookupBalance participantId) + (paymentBalance |> lookupBalance participantId)
-
-
-lookupBalance : Int -> Dict Int Amount -> Amount
-lookupBalance participantId =
-    Dict.get participantId >> Maybe.withDefault 0
-
-
-suggestPaymentAmount : String -> String -> Dict Int Amount -> Dict Int Amount -> Result ( Maybe Int, Maybe Int ) Amount
-suggestPaymentAmount payer receiver paymentBalance balance =
+suggestPaymentAmount : Int -> Int -> Balances -> Balances -> Result ( Maybe Int, Maybe Int ) Amount
+suggestPaymentAmount payerId receiverId paymentBalance balance =
     let
-        payerId =
-            payer |> String.toInt |> Maybe.withDefault 0
-
-        receiverId =
-            receiver |> String.toInt |> Maybe.withDefault 0
-
         payerBalance =
             sumBalances payerId paymentBalance balance
 
@@ -262,11 +267,11 @@ suggestPaymentAmount payer receiver paymentBalance balance =
         Ok suggestedAmount
 
 
-updatePaymentBalances : Int -> Int -> Amount -> Dict Int Amount -> Dict Int Amount
+updatePaymentBalances : Int -> Int -> Amount -> Balances -> Balances
 updatePaymentBalances payerId receiverId amount =
     updatePaymentBalance payerId amount >> updatePaymentBalance receiverId -amount
 
 
-updatePaymentBalance : Int -> Amount -> Dict Int Amount -> Dict Int Amount
+updatePaymentBalance : Int -> Amount -> Balances -> Balances
 updatePaymentBalance participantId amount =
     Dict.update participantId (Maybe.withDefault 0 >> (+) amount >> Just)
