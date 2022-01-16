@@ -7,8 +7,6 @@ import Json.Encode as Encode exposing (Value)
 import Maybe.Extra as Maybe
 
 
-
-
 type alias Expense =
     { id : Int
     , payer : Int

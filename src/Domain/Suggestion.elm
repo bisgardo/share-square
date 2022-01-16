@@ -1,9 +1,8 @@
 module Domain.Suggestion exposing (..)
 
+import Dict exposing (Dict)
 import Domain.Amount as Amount exposing (Amount)
 import Domain.Balance as Balance exposing (Balances)
-import Dict exposing (Dict)
-
 
 
 autosuggestPayments : Balances -> Dict Int (List ( Int, Amount ))
