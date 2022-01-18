@@ -1,14 +1,29 @@
 module Domain.Payment exposing (..)
 
 import Domain.Amount as Amount exposing (Amount)
+import Domain.Participant as Participant
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 
 
+type alias Id =
+    Int
+
+
+idFromString : String -> Maybe Id
+idFromString =
+    String.toInt
+
+
+idToString : Id -> String
+idToString =
+    String.fromInt
+
+
 type alias Payment =
-    { id : Int
-    , payer : Int
-    , receiver : Int
+    { id : Id
+    , payer : Participant.Id
+    , receiver : Participant.Id
     , amount : Amount
     , done : Bool
     }

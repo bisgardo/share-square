@@ -13,16 +13,16 @@ import Util.Update as Update
 
 toField : Participant -> Field
 toField participant =
-    { key = String.fromInt participant.id
+    { key = participant.id |> Participant.idToString
     , value = participant.name
     }
 
 
-lookupName : Int -> Dict Int String -> String
+lookupName : Participant.Id -> Dict Participant.Id String -> String
 lookupName id idToName =
     case Dict.get id idToName of
         Nothing ->
-            "<" ++ String.fromInt id ++ ">"
+            "<" ++ Participant.idToString id ++ ">"
 
         Just name ->
             name
@@ -31,9 +31,9 @@ lookupName id idToName =
 type alias Model =
     { create : Maybe CreateModel
     , participants : List Participant
-    , idToName : Dict Int String
+    , idToName : Dict Participant.Id String
     , namesLowercase : Set String -- used for case-insensitive duplication check
-    , nextId : Int
+    , nextId : Participant.Id
     }
 
 
@@ -223,7 +223,7 @@ import_ participants model =
     }
 
 
-create : Int -> String -> Result String Participant
+create : Participant.Id -> String -> Result String Participant
 create id name =
     -- Should probably run the name through the validator...
     if name |> String.isEmpty then

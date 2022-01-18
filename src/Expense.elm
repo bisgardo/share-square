@@ -6,7 +6,7 @@ import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Domain.Amount as Amount exposing (Amount)
 import Domain.Expense as Expense exposing (Expense)
-import Domain.Participant exposing (Participant)
+import Domain.Participant as Participant exposing (Participant)
 import Html exposing (Html)
 import Html.Attributes exposing (class)
 import Html.Events
@@ -34,14 +34,14 @@ maxDescriptionLength =
 
 
 type Msg
-    = LoadCreate (Maybe Int)
+    = LoadCreate (Maybe Expense.Id)
     | CloseModal
     | CreateEditPayer String
     | CreateEditAmount String
     | CreateEditDescription String
     | CreateEditReceiver String Bool
     | CreateSubmit
-    | Delete Int
+    | Delete Expense.Id
     | LayoutMsg Layout.Msg
     | ParticipantMsg Participant.Msg
     | DomMsg (Result Dom.Error ())
@@ -51,7 +51,7 @@ type alias Model =
     { create : Maybe CreateModel
     , expenses : List Expense
     , participant : Participant.Model
-    , nextId : Int
+    , nextId : Expense.Id
     }
 
 
@@ -63,7 +63,7 @@ type alias CreateModel =
     , amount : Validated Field
     , description : Validated Field
     , receivers : Dict String Float -- TODO should just be Set
-    , editId : Maybe Int
+    , editId : Maybe Expense.Id
     }
 
 
@@ -84,12 +84,12 @@ import_ participants expenses model =
     }
 
 
-create : Config -> Int -> CreateModel -> Result String Expense
+create : Config -> Expense.Id -> CreateModel -> Result String Expense
 create config id model =
     -- Should probably run values though their validators...
     let
         payerResult =
-            case model.payerId |> String.toInt of
+            case model.payerId |> Expense.idFromString of
                 Nothing ->
                     Err <| "unexpected non-integer key '" ++ model.payerId ++ "' of payer"
 
@@ -108,7 +108,7 @@ create config id model =
             model.receivers
                 |> Dict.parseKeys
                     (\key ->
-                        case key |> String.toInt of
+                        case key |> Expense.idFromString of
                             Nothing ->
                                 Err <| "unexpected non-integer receiver '" ++ key ++ "'"
 
@@ -192,7 +192,7 @@ view config model =
                     ++ (model.participant.participants
                             |> List.map
                                 (\participant ->
-                                    ( participant.id |> String.fromInt
+                                    ( participant.id |> Participant.idToString
                                     , Html.td [] [ Html.text participant.name ]
                                     )
                                 )
@@ -205,7 +205,7 @@ view config model =
                                         -- This breaks the focus originally put on the element,
                                         -- but due to the mutation observer also causes the tooltip to be
                                         -- disposed and recreated for no good reason.
-                                        [ ( model.participant.nextId |> String.fromInt, Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
+                                        [ ( model.participant.nextId |> Participant.idToString, Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
 
                                     else
                                         htmls
@@ -224,7 +224,7 @@ view config model =
                     (\expense ->
                         let
                             id =
-                                expense.id |> String.fromInt
+                                expense.id |> Expense.idToString
                         in
                         ( id
                         , Html.tr []
@@ -387,9 +387,9 @@ update config msg model =
                                 |> Maybe.map
                                     (\firstParticipant ->
                                         initCreate
-                                            (firstParticipant.id |> String.fromInt)
+                                            (firstParticipant.id |> Participant.idToString)
                                             (model.participant.participants
-                                                |> List.map (.id >> String.fromInt)
+                                                |> List.map (.id >> Participant.idToString)
                                                 |> List.map (\key -> ( key, 1.0 ))
                                                 |> Dict.fromList
                                             )
@@ -408,8 +408,8 @@ update config msg model =
                                     let
                                         newCreateModel =
                                             initCreate
-                                                (expense.payer |> String.fromInt)
-                                                (expense.receivers |> Dict.mapKeys String.fromInt)
+                                                (expense.payer |> Participant.idToString)
+                                                (expense.receivers |> Dict.mapKeys Participant.idToString)
 
                                         descriptionField =
                                             newCreateModel.description

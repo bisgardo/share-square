@@ -3,9 +3,11 @@ module Settlement exposing (..)
 import Config exposing (Config)
 import Dict exposing (Dict)
 import Domain.Amount as Amount exposing (Amount)
-import Domain.Expense exposing (Expense)
-import Domain.Payment exposing (Payment)
-import Domain.Suggestion as Suggestion
+import Domain.Balance exposing (Balances)
+import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
+import Domain.Participant as Participant
+import Domain.Payment as Payment exposing (Payment)
+import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
@@ -38,9 +40,9 @@ init =
 
 type alias ComputedModel =
     { expenses : Expenses
-    , debts : Expenses
-    , balance : Dict Int Amount
-    , suggestedPayments : Dict Int (List Payment.SuggestedPayment)
+    , debts : Debt
+    , balance : Balances
+    , suggestedPayments : Dict Participant.Id (List SuggestedPayment) -- TODO extract type?
     }
 
 
@@ -54,7 +56,7 @@ import_ payments model =
 
 type Msg
     = Disable
-    | Enable (List Int) (List Expense)
+    | Enable (List Participant.Id) (List Expense)
     | PaymentMsg Payment.Msg
 
 
@@ -70,7 +72,7 @@ view config participantModel model =
             ++ (Payment.view config participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
-viewBalances : Config -> Dict Int String -> Model -> Html Msg
+viewBalances : Config -> Dict Participant.Id String -> Model -> Html Msg
 viewBalances config participants model =
     Html.table
         [ Html.Attributes.class "table" ]
@@ -129,7 +131,7 @@ viewBalances config participants model =
                             >> List.sort
                             >> List.map
                                 (\( participantName, participantId, amount ) ->
-                                    ( participantId |> String.fromInt
+                                    ( participantId |> Participant.idToString
                                     , Html.tr
                                         [ Html.Attributes.class <|
                                             if amount < 0 then
@@ -179,7 +181,7 @@ viewBalances config participants model =
                                                                                             ++ " less from "
                                                                                             ++ receiverName
                                                                                             ++ " in payment #"
-                                                                                            ++ String.fromInt paymentId
+                                                                                            ++ Payment.idToString paymentId
 
                                                                                     else
                                                                                         "Pay additional "
@@ -187,7 +189,7 @@ viewBalances config participants model =
                                                                                             ++ " to "
                                                                                             ++ receiverName
                                                                                             ++ " in payment #"
-                                                                                            ++ String.fromInt paymentId
+                                                                                            ++ Payment.idToString paymentId
                                                                         ]
                                                                     ]
                                                             )
@@ -222,100 +224,9 @@ viewPaymentsInstructions =
         ]
 
 
-{-| A dict from ID of payer to dict from ID of receiver to totally expensed amount.
--}
-type alias Expenses =
-    Dict Int (Dict Int Amount)
-
-
-{-| A dict from ID of receiver to dict from ID of payer to totally expensed amount.
--}
-type alias Debt =
-    Expenses
-
-
-expensesFromList : List Expense -> Expenses
-expensesFromList =
-    List.foldl
-        (\expense outerResult ->
-            let
-                weightSum =
-                    expense.receivers
-                        |> Dict.values
-                        |> List.sum
-
-                weightedDebt =
-                    expense.receivers
-                        |> Dict.foldl
-                            (\receiver part innerResult ->
-                                if receiver == expense.payer then
-                                    -- Ignore debt to self.
-                                    innerResult
-
-                                else
-                                    innerResult
-                                        |> Dict.insert receiver (part * (expense.amount |> toFloat) / weightSum |> round)
-                            )
-                            Dict.empty
-            in
-            if weightedDebt |> Dict.isEmpty then
-                -- Ignore entry if the payer is the only receiver of the expense.
-                outerResult
-
-            else
-                Dict.update expense.payer
-                    (Maybe.withDefault Dict.empty
-                        >> Dict.sumValues weightedDebt
-                        >> Just
-                    )
-                    outerResult
-        )
-        Dict.empty
-
-
-invert : Expenses -> Debt
-invert =
-    Dict.foldl
-        (\payer payerExpenses result ->
-            Dict.foldl
-                (\receiver amount ->
-                    Dict.update receiver
-                        (Maybe.withDefault Dict.empty
-                            >> Dict.update payer (Maybe.withDefault 0 >> (+) amount >> Just)
-                            >> Just
-                        )
-                )
-                result
-                payerExpenses
-        )
-        Dict.empty
-
-
 subscriptions : Model -> Sub Msg
 subscriptions =
     .payment >> Payment.subscriptions >> Sub.map PaymentMsg
-
-
-findExistingPaymentId : Int -> Int -> List Payment -> Maybe ( Int, Bool )
-findExistingPaymentId payerId receiverId payments =
-    case payments of
-        [] ->
-            Nothing
-
-        existingPayment :: remainingExistingPayments ->
-            if not existingPayment.done && existingPayment.payer == payerId && existingPayment.receiver == receiverId then
-                Just ( existingPayment.id, False )
-
-            else if not existingPayment.done && existingPayment.payer == receiverId && existingPayment.receiver == payerId then
-                Just ( existingPayment.id, True )
-
-            else
-                findExistingPaymentId payerId receiverId remainingExistingPayments
-
-
-withExistingPaymentId : List Payment -> Int -> ( Int, Amount ) -> Payment.SuggestedPayment
-withExistingPaymentId existingPayments payerId ( receiverId, amount ) =
-    ( receiverId, amount, findExistingPaymentId payerId receiverId existingPayments )
 
 
 update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
@@ -333,10 +244,10 @@ update config msg model =
             else
                 let
                     expenses =
-                        expensesFromList expenseList
+                        Expense.expensesFromList expenseList
 
                     debts =
-                        invert expenses
+                        Expense.invert expenses
 
                     balance =
                         participantIds
@@ -356,7 +267,7 @@ update config msg model =
                                 , suggestedPayments =
                                     -- The result value of sumValues only contains keys from the first argument.
                                     Suggestion.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
-                                        |> Dict.map (\payerId -> List.map (withExistingPaymentId model.payment.payments payerId))
+                                        |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId model.payment.payments payerId))
                                 }
                     }
                   , False
@@ -379,7 +290,7 @@ update config msg model =
                                         { computed
                                             | suggestedPayments =
                                                 Suggestion.autosuggestPayments (Dict.sumValues computed.balance paymentModel.paymentBalance)
-                                                    |> Dict.map (\payerId -> List.map (withExistingPaymentId paymentModel.payments payerId))
+                                                    |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId))
                                         }
                                     )
 

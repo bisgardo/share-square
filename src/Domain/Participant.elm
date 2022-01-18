@@ -4,14 +4,28 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 
 
+type alias Id =
+    Int
+
+
+idFromString : String -> Maybe Id
+idFromString =
+    String.toInt
+
+
+idToString : Id -> String
+idToString =
+    String.fromInt
+
+
 type alias Participant =
-    { id : Int
+    { id : Id
     , name : String
     , nameLowercase : String -- used for case-insensitive sorting
     }
 
 
-new : Int -> String -> Participant
+new : Id -> String -> Participant
 new id name =
     { id = id
     , name = name

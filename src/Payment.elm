@@ -5,6 +5,7 @@ import Config exposing (Config)
 import Dict exposing (Dict)
 import Domain.Amount as Amount exposing (Amount)
 import Domain.Balance as Balance exposing (Balances)
+import Domain.Participant as Participant
 import Domain.Payment as Payment exposing (Payment)
 import Domain.Suggestion as Suggestion
 import Expense
@@ -32,8 +33,8 @@ createModalOpenId =
 type alias Model =
     { create : Maybe CreateModel
     , payments : List Payment
-    , paymentBalance : Dict Int Amount
-    , nextId : Int
+    , paymentBalance : Balances
+    , nextId : Payment.Id
     }
 
 
@@ -56,15 +57,15 @@ import_ payments model =
     }
 
 
-create : Config -> Int -> CreateModel -> Result String Payment
+create : Config -> Payment.Id -> CreateModel -> Result String Payment
 create config id model =
     -- Should probably run values though their validators...
-    case model.payerId |> String.toInt of
+    case model.payerId |> Participant.idFromString of
         Nothing ->
             Err <| "unexpected non-integer key '" ++ model.payerId ++ "' of payer"
 
         Just payerId ->
-            case model.receiverId |> String.toInt of
+            case model.receiverId |> Participant.idFromString of
                 Nothing ->
                     Err <| "unexpected non-integer key '" ++ model.receiverId ++ "' of receiver"
 
@@ -118,21 +119,13 @@ type alias CreateModel =
     { payerId : String
     , receiverId : String
     , amount : Validated Field
-    , suggestedAmount : Result ( Maybe Int, Maybe Int ) Amount
+    , suggestedAmount : Result ( Maybe Participant.Id, Maybe Participant.Id ) Amount
     , done : Bool
     }
 
 
-{-| Tuple of receiver ID, amount, and ID of existing payment to amend.
-The payment ID is represented as a pair of the ID and a boolean indicating
-whether the amount should be added (false) or subtracted (true).
--}
-type alias SuggestedPayment =
-    ( Int, Amount, Maybe ( Int, Bool ) )
-
-
 type Msg
-    = LoadCreate (List Int)
+    = LoadCreate (List Participant.Id)
     | CloseModal
     | CreateEditPayer String
     | CreateEditReceiver String
@@ -140,9 +133,9 @@ type Msg
     | CreateSetDone Bool
     | CreateApplySuggestedAmount Amount
     | CreateSubmit
-    | Delete (List Int)
-    | ApplySuggestedPayments (Dict Int (List SuggestedPayment))
-    | SetDone Int Bool
+    | Delete (List Payment.Id)
+    | ApplySuggestedPayments (Dict Participant.Id (List Suggestion.SuggestedPayment))
+    | SetDone Payment.Id Bool
     | LayoutMsg Layout.Msg
     | DomMsg (Result Dom.Error ())
 
@@ -185,7 +178,7 @@ view config participantModel model =
                     (\payment ->
                         let
                             id =
-                                payment.id |> String.fromInt
+                                payment.id |> Payment.idToString
                         in
                         ( id
                         , Html.tr []
@@ -365,7 +358,7 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : Config -> Maybe (Dict Int Amount) -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update : Config -> Maybe Balances -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update config balances msg model =
     case msg of
         LoadCreate participants ->
@@ -415,7 +408,7 @@ update config balances msg model =
                             |> List.head
                             |> Maybe.map
                                 (\firstParticipant ->
-                                    initCreate (firstParticipant |> String.fromInt)
+                                    initCreate (firstParticipant |> Participant.idToString)
                                 )
                 }
               , False
@@ -428,14 +421,14 @@ update config balances msg model =
                             []
 
                         Just payer ->
-                            [ CreateEditPayer (payer |> String.fromInt) ]
+                            [ CreateEditPayer (payer |> Participant.idToString) ]
                      )
                         ++ (case firstPositiveBalanceParticipant |> Maybe.orElse secondParticipantFallback of
                                 Nothing ->
                                     []
 
                                 Just receiver ->
-                                    [ CreateEditReceiver (receiver |> String.fromInt) ]
+                                    [ CreateEditReceiver (receiver |> Participant.idToString) ]
                            )
                     )
 
@@ -700,8 +693,9 @@ validatePaymentAmount amount =
         None
 
 
-suggestPaymentAmount : String -> String -> Balances -> Balances -> Result ( Maybe Int, Maybe Int ) Amount
+suggestPaymentAmount : String -> String -> Balances -> Balances -> Result ( Maybe Participant.Id, Maybe Participant.Id ) Amount
 suggestPaymentAmount payer receiver =
+    -- TODO Return error if ID parsing fails.
     Suggestion.suggestPaymentAmount
-        (payer |> String.toInt |> Maybe.withDefault 0)
-        (receiver |> String.toInt |> Maybe.withDefault 0)
+        (payer |> Participant.idFromString |> Maybe.withDefault 0)
+        (receiver |> Participant.idFromString |> Maybe.withDefault 0)
