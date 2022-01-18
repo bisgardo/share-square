@@ -1,9 +1,11 @@
-module Computation exposing (..)
+module Settlement exposing (..)
 
-import Amount exposing (Amount)
 import Config exposing (Config)
 import Dict exposing (Dict)
-import Expense exposing (Expense)
+import Domain.Amount as Amount exposing (Amount)
+import Domain.Expense exposing (Expense)
+import Domain.Payment exposing (Payment)
+import Domain.Suggestion as Suggestion
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
@@ -11,9 +13,8 @@ import Html.Keyed
 import Layout
 import Maybe.Extra as Maybe
 import Participant exposing (lookupName)
-import Payment exposing (Payment)
+import Payment
 import Util.Dict as Dict
-import Util.Maybe as Maybe
 
 
 type alias Model =
@@ -354,7 +355,7 @@ update config msg model =
                                 , balance = balance
                                 , suggestedPayments =
                                     -- The result value of sumValues only contains keys from the first argument.
-                                    Payment.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
+                                    Suggestion.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
                                         |> Dict.map (\payerId -> List.map (withExistingPaymentId model.payment.payments payerId))
                                 }
                     }
@@ -377,7 +378,7 @@ update config msg model =
                                     (\computed ->
                                         { computed
                                             | suggestedPayments =
-                                                Payment.autosuggestPayments (Dict.sumValues computed.balance paymentModel.paymentBalance)
+                                                Suggestion.autosuggestPayments (Dict.sumValues computed.balance paymentModel.paymentBalance)
                                                     |> Dict.map (\payerId -> List.map (withExistingPaymentId paymentModel.payments payerId))
                                         }
                                     )

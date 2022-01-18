@@ -1,6 +1,6 @@
 module Config exposing (..)
 
-import Amount
+import Domain.Amount as Amount
 
 
 type alias Config =

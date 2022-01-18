@@ -1,11 +1,12 @@
 module Main exposing (main)
 
-import Amount
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
-import Computation
 import Config exposing (Config)
-import Expense exposing (Expense)
+import Domain.Expense as Expense exposing (Expense)
+import Domain.Participant as Participant exposing (Participant)
+import Domain.Payment as Payment exposing (Payment)
+import Expense
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -14,8 +15,9 @@ import Json.Encode as Encode exposing (Value)
 import Layout exposing (..)
 import LocalStorage exposing (Revision)
 import Maybe.Extra as Maybe
-import Participant exposing (Participant)
-import Payment exposing (Payment)
+import Participant
+import Payment
+import Settlement
 import Storage
 import Url exposing (Url)
 import Url.Builder
@@ -59,7 +61,7 @@ type alias Model =
     , key : Browser.Navigation.Key
     , config : Config
     , expense : Expense.Model
-    , computation : Computation.Model
+    , computation : Settlement.Model
     , storageMode : Storage.Mode
     , storageRevision : Revision
     , errors : List Error
@@ -161,7 +163,7 @@ type SyncDirection
 
 type Msg
     = ExpenseMsg Expense.Msg
-    | ComputationMsg Computation.Msg
+    | ComputationMsg Settlement.Msg
     | SetMode Storage.Mode SyncDirection
     | StorageValuesLoaded (Maybe ( Revision, Result Error StorageValues ))
     | StorageValuesStored (Result Revision Revision)
@@ -195,7 +197,7 @@ init flags url key =
             Expense.init
 
         ( computationModel, computationCmd ) =
-            Computation.init
+            Settlement.init
     in
     ( { environment = flags.environment
       , key = key
@@ -220,7 +222,7 @@ subscriptions model =
         |> Expense.subscriptions
         |> Sub.map ExpenseMsg
     , model.computation
-        |> Computation.subscriptions
+        |> Settlement.subscriptions
         |> Sub.map ComputationMsg
     , Storage.valueLoaded
         (\result ->
@@ -256,15 +258,15 @@ subscriptions model =
 
 extractVersion : String -> Maybe ( String, String )
 extractVersion string =
-    case string |> String.indexes schemaVersionSplitter of
-        idx :: _ ->
-            Just
-                ( string |> String.left idx
-                , string |> String.dropLeft (idx + 1)
+    string
+        |> String.indexes schemaVersionSplitter
+        |> List.head
+        |> Maybe.map
+            (\splitterIndex ->
+                ( string |> String.left splitterIndex
+                , string |> String.dropLeft (splitterIndex + 1)
                 )
-
-        _ ->
-            Nothing
+            )
 
 
 tabIds =
@@ -416,7 +418,7 @@ viewContent model =
                     , data "bs-toggle" "tab"
                     , data "bs-target" ("#" ++ tabIds.settlement)
                     , Html.Attributes.class "nav-link"
-                    , Computation.Enable
+                    , Settlement.Enable
                         (model.expense.participant.participants |> List.map .id)
                         model.expense.expenses
                         |> ComputationMsg
@@ -472,7 +474,7 @@ viewExpenses model =
 viewComputation : Model -> List (Html Msg)
 viewComputation model =
     model.computation
-        |> Computation.view model.config model.expense.participant
+        |> Settlement.view model.config model.expense.participant
         |> Html.map ComputationMsg
         |> List.singleton
 
@@ -488,7 +490,7 @@ update msg model =
                 ( ( computationModel, computationModelChanged ), computationCmd ) =
                     if expenseModelChanged then
                         model.computation
-                            |> Computation.update model.config Computation.Disable
+                            |> Settlement.update model.config Settlement.Disable
 
                     else
                         ( ( model.computation, False ), Cmd.none )
@@ -511,7 +513,7 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Computation.update model.config computationMsg
+                    model.computation |> Settlement.update model.config computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch
@@ -596,7 +598,7 @@ import_ revision values model =
                 |> Expense.import_ values.participants values.expenses
         , computation =
             model.computation
-                |> Computation.import_ values.payments
+                |> Settlement.import_ values.payments
         , storageRevision = revision
         , config =
             let
