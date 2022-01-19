@@ -1,5 +1,6 @@
 module Domain.Participant exposing (..)
 
+import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 
@@ -49,3 +50,17 @@ encode participant =
     , ( "n", participant.name |> Encode.string )
     ]
         |> Encode.object
+
+
+type alias NameIndex =
+    Dict Id String
+
+
+lookupName : Id -> NameIndex -> String
+lookupName id index =
+    case Dict.get id index of
+        Nothing ->
+            "<" ++ idToString id ++ ">"
+
+        Just name ->
+            name

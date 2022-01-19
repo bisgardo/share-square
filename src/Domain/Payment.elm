@@ -1,7 +1,7 @@
 module Domain.Payment exposing (..)
 
 import Domain.Amount as Amount exposing (Amount)
-import Domain.Participant as Participant
+import Domain.SettlementGroup as SettlementGroup
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 
@@ -22,8 +22,8 @@ idToString =
 
 type alias Payment =
     { id : Id
-    , payer : Participant.Id
-    , receiver : Participant.Id
+    , payer : SettlementGroup.Id
+    , receiver : SettlementGroup.Id
     , amount : Amount
     , done : Bool
     }

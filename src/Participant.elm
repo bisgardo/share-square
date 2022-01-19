@@ -2,6 +2,7 @@ module Participant exposing (..)
 
 import Dict exposing (Dict)
 import Domain.Participant as Participant exposing (Participant)
+import Domain.SettlementGroup as SettlementGroup exposing (SettlementGroups)
 import Html exposing (Html, text)
 import Html.Attributes
 import Html.Events exposing (onSubmit)
@@ -18,22 +19,19 @@ toField participant =
     }
 
 
-lookupName : Participant.Id -> Dict Participant.Id String -> String
-lookupName id idToName =
-    case Dict.get id idToName of
-        Nothing ->
-            "<" ++ Participant.idToString id ++ ">"
-
-        Just name ->
-            name
-
-
 type alias Model =
     { create : Maybe CreateModel
     , participants : List Participant
-    , idToName : Dict Participant.Id String
+    , idToName : Dict Participant.Id String -- TODO rename to 'nameIndex'
     , namesLowercase : Set String -- used for case-insensitive duplication check
     , nextId : Participant.Id
+    , settlementGroup : SettlementGroupModel
+    }
+
+
+type alias SettlementGroupModel =
+    { groups : SettlementGroups
+    , idToName : SettlementGroup.NameIndex
     }
 
 
@@ -49,6 +47,7 @@ init =
       , idToName = Dict.empty
       , namesLowercase = Set.empty
       , nextId = 1
+      , settlementGroup = { groups = [], idToName = Dict.empty }
       }
     , Cmd.none
     )

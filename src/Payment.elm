@@ -231,8 +231,8 @@ viewCreateOpen participantModel =
         createModalId
         "Add payment"
         [ Html.Attributes.class "w-100"
-        , Html.Attributes.disabled (participantModel.participants |> List.isEmpty)
-        , Html.Events.onClick (participantModel.participants |> List.map .id |> LoadCreate)
+        , Html.Attributes.disabled (participantModel.settlementGroup.groups |> List.isEmpty)
+        , Html.Events.onClick (participantModel.settlementGroup.groups |> List.map .id |> LoadCreate)
         ]
 
 

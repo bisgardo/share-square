@@ -7,6 +7,7 @@ import Domain.Balance exposing (Balances)
 import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
 import Domain.Participant as Participant
 import Domain.Payment as Payment exposing (Payment)
+import Domain.SettlementGroup as SettlementGroup
 import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
 import Html exposing (Html, div, text)
 import Html.Attributes
@@ -14,7 +15,7 @@ import Html.Events
 import Html.Keyed
 import Layout
 import Maybe.Extra as Maybe
-import Participant exposing (lookupName)
+import Participant
 import Payment
 import Util.Dict as Dict
 
@@ -65,15 +66,15 @@ view config participantModel model =
     div [ Html.Attributes.class "col" ] <|
         [ Html.h3 [] [ text "Balances" ]
         , viewBalanceInstructions
-        , viewBalances config participantModel.idToName model
+        , viewBalances config participantModel.settlementGroup.idToName model
         , Html.h3 [] [ text "Payments" ]
         , viewPaymentsInstructions
         ]
             ++ (Payment.view config participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
-viewBalances : Config -> Dict Participant.Id String -> Model -> Html Msg
-viewBalances config participants model =
+viewBalances : Config -> SettlementGroup.NameIndex -> Model -> Html Msg
+viewBalances config settlementGroups model =
     Html.table
         [ Html.Attributes.class "table" ]
         [ Html.thead []
@@ -112,7 +113,7 @@ viewBalances config participants model =
                                 (\( participantId, expendedAmount ) ->
                                     let
                                         participantName =
-                                            lookupName participantId participants
+                                            settlementGroups |> SettlementGroup.lookupName participantId
 
                                         paymentBalance =
                                             model.payment.paymentBalance
@@ -131,7 +132,7 @@ viewBalances config participants model =
                             >> List.sort
                             >> List.map
                                 (\( participantName, participantId, amount ) ->
-                                    ( participantId |> Participant.idToString
+                                    ( participantId |> SettlementGroup.idToString
                                     , Html.tr
                                         [ Html.Attributes.class <|
                                             if amount < 0 then
@@ -151,7 +152,7 @@ viewBalances config participants model =
                                                 |> Maybe.unwrap []
                                                     (List.map
                                                         (\( receiverId, suggestedAmount, payment ) ->
-                                                            ( participants |> Participant.lookupName receiverId
+                                                            ( settlementGroups |> Participant.lookupName receiverId
                                                             , receiverId
                                                             , ( suggestedAmount, payment )
                                                             )

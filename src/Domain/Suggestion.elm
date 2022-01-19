@@ -3,8 +3,8 @@ module Domain.Suggestion exposing (..)
 import Dict exposing (Dict)
 import Domain.Amount as Amount exposing (Amount)
 import Domain.Balance as Balance exposing (Balances)
-import Domain.Participant as Participant
 import Domain.Payment as Payment exposing (Payment)
+import Domain.SettlementGroup as SettlementGroup
 
 
 {-| Triple of receiver ID, amount, and ID of existing payment to amend.
@@ -12,10 +12,10 @@ The payment ID is represented as a pair of the ID and a boolean indicating
 whether the amount should be added (false) or subtracted (true).
 -}
 type alias SuggestedPayment =
-    ( Participant.Id, Amount, Maybe ( Payment.Id, Bool ) )
+    ( SettlementGroup.Id, Amount, Maybe ( Payment.Id, Bool ) )
 
 
-autosuggestPayments : Balances -> Dict Participant.Id (List ( Participant.Id, Amount ))
+autosuggestPayments : Balances -> Dict SettlementGroup.Id (List ( SettlementGroup.Id, Amount ))
 autosuggestPayments totalBalances =
     case totalBalances |> autosuggestPayment of
         Nothing ->
@@ -32,9 +32,9 @@ autosuggestPayments totalBalances =
                     )
 
 
-autosuggestPayment : Balances -> Maybe ( Participant.Id, Participant.Id, Amount )
+autosuggestPayment : Balances -> Maybe ( SettlementGroup.Id, SettlementGroup.Id, Amount )
 autosuggestPayment =
-    Balance.findExtremaBalanceParticipants
+    Balance.findExtremaBalanceGroup
         >> Maybe.andThen
             (\( ( minParticipant, minBalance ), ( maxParticipant, maxBalance ) ) ->
                 let
@@ -49,7 +49,7 @@ autosuggestPayment =
             )
 
 
-suggestPaymentAmount : Participant.Id -> Participant.Id -> Balances -> Balances -> Result ( Maybe Participant.Id, Maybe Participant.Id ) Amount
+suggestPaymentAmount : SettlementGroup.Id -> SettlementGroup.Id -> Balances -> Balances -> Result ( Maybe SettlementGroup.Id, Maybe SettlementGroup.Id ) Amount
 suggestPaymentAmount payerId receiverId paymentBalance balance =
     let
         payerBalance =
@@ -79,7 +79,7 @@ suggestPaymentAmount payerId receiverId paymentBalance balance =
         Ok suggestedAmount
 
 
-findExistingPaymentId : Participant.Id -> Participant.Id -> List Payment -> Maybe ( Payment.Id, Bool )
+findExistingPaymentId : SettlementGroup.Id -> SettlementGroup.Id -> List Payment -> Maybe ( Payment.Id, Bool )
 findExistingPaymentId payerId receiverId payments =
     case payments of
         [] ->
@@ -96,6 +96,6 @@ findExistingPaymentId payerId receiverId payments =
                 findExistingPaymentId payerId receiverId remainingExistingPayments
 
 
-withExistingPaymentId : List Payment -> Participant.Id -> ( Participant.Id, Amount ) -> SuggestedPayment
+withExistingPaymentId : List Payment -> SettlementGroup.Id -> ( SettlementGroup.Id, Amount ) -> SuggestedPayment
 withExistingPaymentId existingPayments payerId ( receiverId, amount ) =
     ( receiverId, amount, findExistingPaymentId payerId receiverId existingPayments )
