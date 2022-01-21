@@ -14,7 +14,7 @@ import Html.Events
 import Html.Keyed
 import Layout
 import Maybe.Extra as Maybe
-import Participant exposing (lookupName)
+import Participant
 import Payment
 import Util.Dict as Dict
 
@@ -112,7 +112,7 @@ viewBalances config participants model =
                                 (\( participantId, expendedAmount ) ->
                                     let
                                         participantName =
-                                            lookupName participantId participants
+                                            Participant.lookupName participantId participants
 
                                         paymentBalance =
                                             model.payment.paymentBalance

@@ -18,16 +18,6 @@ toField participant =
     }
 
 
-lookupName : Participant.Id -> Dict Participant.Id String -> String
-lookupName id idToName =
-    case Dict.get id idToName of
-        Nothing ->
-            "<" ++ Participant.idToString id ++ ">"
-
-        Just name ->
-            name
-
-
 type alias Model =
     { create : Maybe CreateModel
     , participants : List Participant
