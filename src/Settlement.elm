@@ -7,7 +7,7 @@ import Domain.Balance exposing (Balances)
 import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
 import Domain.Participant as Participant
 import Domain.Payment as Payment exposing (Payment)
-import Domain.SettlementGroup as SettlementGroup
+import Domain.SettlementGroup as SettlementGroup exposing (SettlementGroup, SettlementGroups)
 import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
 import Html exposing (Html, div, text)
 import Html.Attributes
@@ -43,7 +43,7 @@ type alias ComputedModel =
     { expenses : Expenses
     , debts : Debt
     , balance : Balances
-    , suggestedPayments : Dict Participant.Id (List SuggestedPayment) -- TODO extract type?
+    , suggestedPayments : Dict SettlementGroup.Id (List SuggestedPayment) -- TODO extract type?
     }
 
 
@@ -57,7 +57,7 @@ import_ payments model =
 
 type Msg
     = Disable
-    | Enable (List Participant.Id) (List Expense)
+    | Enable SettlementGroups (List Expense)
     | PaymentMsg Payment.Msg
 
 
@@ -66,15 +66,15 @@ view config participantModel model =
     div [ Html.Attributes.class "col" ] <|
         [ Html.h3 [] [ text "Balances" ]
         , viewBalanceInstructions
-        , viewBalances config participantModel.settlementGroup.idToName model
+        , viewBalances config participantModel.idToName participantModel.settlementGroup.index model
         , Html.h3 [] [ text "Payments" ]
         , viewPaymentsInstructions
         ]
             ++ (Payment.view config participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
-viewBalances : Config -> SettlementGroup.NameIndex -> Model -> Html Msg
-viewBalances config settlementGroups model =
+viewBalances : Config -> Participant.NameIndex -> SettlementGroup.Index -> Model -> Html Msg
+viewBalances config participantNames settlementGroups model =
     Html.table
         [ Html.Attributes.class "table" ]
         [ Html.thead []
@@ -110,29 +110,34 @@ viewBalances config settlementGroups model =
                         computed.balance
                             |> Dict.toList
                             |> List.map
-                                (\( participantId, expendedAmount ) ->
+                                (\( settlementGroupId, expendedAmount ) ->
                                     let
-                                        participantName =
-                                            settlementGroups |> SettlementGroup.lookupName participantId
+                                        firstParticipantName =
+                                            settlementGroups
+                                                |> SettlementGroup.lookup settlementGroupId
+                                                |> Maybe.andThen (.participants >> List.head)
+                                                |> Maybe.map (\participantId -> participantNames |> Participant.lookupName participantId)
+                                                |> Maybe.withDefault ""
 
                                         paymentBalance =
                                             model.payment.paymentBalance
-                                                |> Dict.get participantId
+                                                |> Dict.get settlementGroupId
                                                 |> Maybe.withDefault 0
 
                                         totalBalance =
                                             expendedAmount + paymentBalance
                                     in
-                                    ( participantName
-                                    , participantId
+                                    ( firstParticipantName
+                                    , settlementGroupId
                                     , totalBalance
                                     )
                                 )
                             -- Sort by name, then ID.
+                            -- TODO Resolve settlement from ID above and sort by first field.
                             >> List.sort
                             >> List.map
-                                (\( participantName, participantId, amount ) ->
-                                    ( participantId |> SettlementGroup.idToString
+                                (\( firstParticipantName, settlementGroupId, amount ) ->
+                                    ( settlementGroupId |> SettlementGroup.idToString
                                     , Html.tr
                                         [ Html.Attributes.class <|
                                             if amount < 0 then
@@ -144,15 +149,31 @@ viewBalances config settlementGroups model =
                                             else
                                                 "text-decoration-line-through"
                                         ]
-                                        [ Html.td [] [ text participantName ]
+                                        [ Html.td []
+                                            (settlementGroups
+                                                |> SettlementGroup.lookup settlementGroupId
+                                                |> Maybe.map
+                                                    (\settlementGroup ->
+                                                        settlementGroup.participants
+                                                            |> List.map
+                                                                (\participantId ->
+                                                                    let
+                                                                        name =
+                                                                            participantNames |> Participant.lookupName participantId
+                                                                    in
+                                                                    div [] [ text name ]
+                                                                )
+                                                    )
+                                                |> Maybe.withDefault []
+                                            )
                                         , Html.td [] [ text (amount |> Amount.toStringSigned "+" config.amount) ]
                                         , Html.td []
                                             (computed.suggestedPayments
-                                                |> Dict.get participantId
+                                                |> Dict.get settlementGroupId
                                                 |> Maybe.unwrap []
                                                     (List.map
                                                         (\( receiverId, suggestedAmount, payment ) ->
-                                                            ( settlementGroups |> Participant.lookupName receiverId
+                                                            ( settlementGroups |> SettlementGroup.lookupName receiverId
                                                             , receiverId
                                                             , ( suggestedAmount, payment )
                                                             )
@@ -164,7 +185,7 @@ viewBalances config settlementGroups model =
                                                                 div []
                                                                     [ Layout.internalLink
                                                                         (Payment.ApplySuggestedPayments
-                                                                            (Dict.singleton participantId [ ( receiverId, suggestedAmount, payment ) ])
+                                                                            (Dict.singleton settlementGroupId [ ( receiverId, suggestedAmount, payment ) ])
                                                                             |> PaymentMsg
                                                                         )
                                                                         [ Html.text <|
@@ -236,7 +257,7 @@ update config msg model =
         Disable ->
             ( ( { model | computed = Nothing }, False ), Cmd.none )
 
-        Enable participantIds expenseList ->
+        Enable settlementGroups expenseList ->
             -- TODO Instead of enable/disable, detect if the expense list actually changed and only recompute if it did.
             --      If only the participant list changed, just add/remove the relevant balance entries.
             if Maybe.isJust model.computed then
@@ -251,13 +272,41 @@ update config msg model =
                         Expense.invert expenses
 
                     balance =
-                        participantIds
+                        settlementGroups
                             |> List.foldl
-                                (\participant ->
-                                    (Dict.valueSum participant expenses - Dict.valueSum participant debts)
-                                        |> Dict.insert participant
+                                (\settlementGroup ->
+                                    settlementGroup.participants
+                                        |> List.foldl
+                                            (\participant ->
+                                                (Dict.valueSum participant expenses - Dict.valueSum participant debts)
+                                                    |> (+)
+                                            )
+                                            0
+                                        |> Dict.insert settlementGroup.id
                                 )
                                 Dict.empty
+
+                    --participantBalance =
+                    --    settlementGroups
+                    --        |> List.map .participants
+                    --        |> List.concat
+                    --        |> List.foldl
+                    --            (\participant ->
+                    --                (Dict.valueSum participant expenses - Dict.valueSum participant debts)
+                    --                    |> Dict.insert participant
+                    --            )
+                    --            Dict.empty
+                    --
+                    --settlementGroupBalance =
+                    --    settlementGroups
+                    --        |> List.foldl
+                    --            (\settlementGroup ->
+                    --                settlementGroup.participants
+                    --                    |> List.map (\participantId -> Dict.get participantId participantBalance |> Maybe.withDefault 0)
+                    --                    |> List.sum
+                    --                    |> Dict.insert settlementGroup.id
+                    --            )
+                    --            Dict.empty
                 in
                 ( ( { model
                         | computed =

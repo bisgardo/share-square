@@ -29,15 +29,20 @@ type alias SettlementGroups =
     List SettlementGroup
 
 
-type alias NameIndex =
-    Dict Id String
+type alias Index =
+    Dict Id SettlementGroup
 
 
-lookupName : Id -> NameIndex -> String
+lookup : Id -> Index -> Maybe SettlementGroup
+lookup =
+    Dict.get
+
+
+lookupName : Id -> Index -> String
 lookupName id index =
-    case Dict.get id index of
+    case lookup id index of
         Nothing ->
             "<" ++ idToString id ++ ">"
 
-        Just name ->
-            name
+        Just settlementGroup ->
+            settlementGroup.name

@@ -31,7 +31,7 @@ type alias Model =
 
 type alias SettlementGroupModel =
     { groups : SettlementGroups
-    , idToName : SettlementGroup.NameIndex
+    , index : SettlementGroup.Index
     }
 
 
@@ -47,7 +47,7 @@ init =
       , idToName = Dict.empty
       , namesLowercase = Set.empty
       , nextId = 1
-      , settlementGroup = { groups = [], idToName = Dict.empty }
+      , settlementGroup = { groups = [], index = Dict.empty }
       }
     , Cmd.none
     )

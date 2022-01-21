@@ -419,7 +419,7 @@ viewContent model =
                     , data "bs-target" ("#" ++ tabIds.settlement)
                     , Html.Attributes.class "nav-link"
                     , Settlement.Enable
-                        (model.expense.participant.participants |> List.map .id)
+                        model.expense.participant.settlementGroup.groups
                         model.expense.expenses
                         |> ComputationMsg
                         |> Html.Events.onClick
