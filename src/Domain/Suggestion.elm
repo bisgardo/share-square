@@ -23,7 +23,7 @@ autosuggestPayments totalBalances =
 
         Just ( payerId, receiverId, amount ) ->
             totalBalances
-                |> Balance.transferAmount payerId receiverId amount
+                |> Balance.transfer payerId receiverId amount
                 |> autosuggestPayments
                 |> Dict.update payerId
                     (Maybe.withDefault []

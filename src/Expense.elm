@@ -229,7 +229,7 @@ view config model =
                         ( id
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
-                             , Html.td [] [ Html.text (model.participant.idToName |> Participant.lookupName expense.payer) ]
+                             , Html.td [] [ Html.text (Participant.lookup expense.payer model.participant.idToIndex model.participant.participants |> Participant.safeName expense.payer) ]
                              , Html.td []
                                 [ Html.span
                                     [ data "bs-toggle" "tooltip"

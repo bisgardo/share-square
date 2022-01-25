@@ -7,4 +7,5 @@ nullableList : Decode.Decoder a -> Decode.Decoder (List a)
 nullableList =
     Decode.list
         >> Decode.maybe
+        -- TODO 'maybe' or 'nullable'?
         >> Decode.map (Maybe.withDefault [])

@@ -3,10 +3,10 @@ module Settlement exposing (..)
 import Config exposing (Config)
 import Dict exposing (Dict)
 import Domain.Amount as Amount exposing (Amount)
-import Domain.Balance exposing (Balances)
 import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
-import Domain.Participant as Participant
+import Domain.Participant as Participant exposing (Participant)
 import Domain.Payment as Payment exposing (Payment)
+import Domain.Settlement as Settlement
 import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
 import Html exposing (Html, div, text)
 import Html.Attributes
@@ -20,7 +20,7 @@ import Util.Dict as Dict
 
 
 type alias Model =
-    { computed : Maybe ComputedModel
+    { computed : Maybe Settlement.Computed
     , payment : Payment.Model
     }
 
@@ -38,14 +38,6 @@ init =
     )
 
 
-type alias ComputedModel =
-    { expenses : Expenses
-    , debts : Debt
-    , balance : Balances
-    , suggestedPayments : Dict Participant.Id (List SuggestedPayment) -- TODO extract type?
-    }
-
-
 import_ : List Payment -> Model -> Model
 import_ payments model =
     { model
@@ -56,7 +48,7 @@ import_ payments model =
 
 type Msg
     = Disable
-    | Enable (List Participant.Id) (List Expense)
+    | Enable Participant.Index (List Participant) (List Expense)
     | PaymentMsg Payment.Msg
 
 
@@ -65,15 +57,15 @@ view config participantModel model =
     div [ Html.Attributes.class "col" ] <|
         [ Html.h3 [] [ text "Balances" ]
         , viewBalanceInstructions
-        , viewBalances config participantModel.idToName model
+        , viewBalances config participantModel model
         , Html.h3 [] [ text "Payments" ]
         , viewPaymentsInstructions
         ]
             ++ (Payment.view config participantModel model.payment |> List.map (Html.map PaymentMsg))
 
 
-viewBalances : Config -> Dict Participant.Id String -> Model -> Html Msg
-viewBalances config participants model =
+viewBalances : Config -> Participant.Model -> Model -> Html Msg
+viewBalances config participantModel model =
     Html.table
         [ Html.Attributes.class "table" ]
         [ Html.thead []
@@ -106,52 +98,58 @@ viewBalances config participants model =
             (model.computed
                 |> Maybe.unwrap []
                     (\computed ->
-                        computed.balance
+                        Dict.sumValues computed.balance model.payment.paymentBalance
                             |> Dict.toList
                             |> List.map
-                                (\( participantId, expendedAmount ) ->
+                                (\( participantId, totalBalance ) ->
                                     let
+                                        participant =
+                                            Participant.lookup participantId participantModel.idToIndex participantModel.participants
+
                                         participantName =
-                                            Participant.lookupName participantId participants
-
-                                        paymentBalance =
-                                            model.payment.paymentBalance
-                                                |> Dict.get participantId
-                                                |> Maybe.withDefault 0
-
-                                        totalBalance =
-                                            expendedAmount + paymentBalance
+                                            participant |> Participant.safeName participantId
                                     in
-                                    ( participantName
-                                    , participantId
-                                    , totalBalance
-                                    )
+                                    { id = participantId
+                                    , name = participantName
+                                    , participant = participant
+                                    , totalBalance = totalBalance
+                                    }
                                 )
                             -- Sort by name, then ID.
-                            >> List.sort
+                            >> List.sortBy (\entry -> ( entry.name, entry.id ))
                             >> List.map
-                                (\( participantName, participantId, amount ) ->
-                                    ( participantId |> Participant.idToString
+                                (\entry ->
+                                    ( entry.id |> Participant.idToString
                                     , Html.tr
                                         [ Html.Attributes.class <|
-                                            if amount < 0 then
+                                            if entry.totalBalance < 0 then
                                                 "text-danger"
 
-                                            else if amount > 0 then
+                                            else if entry.totalBalance > 0 then
                                                 "text-success"
 
                                             else
                                                 "text-decoration-line-through"
                                         ]
-                                        [ Html.td [] [ text participantName ]
-                                        , Html.td [] [ text (amount |> Amount.toStringSigned "+" config.amount) ]
+                                        [ Html.td [] [ text entry.name ]
+                                        , Html.td []
+                                            [ case entry.participant of
+                                                Nothing ->
+                                                    text <| "N/A"
+
+                                                Just _ ->
+                                                    text
+                                                        (entry.totalBalance
+                                                            |> Amount.toStringSigned "+" config.amount
+                                                        )
+                                            ]
                                         , Html.td []
                                             (computed.suggestedPayments
-                                                |> Dict.get participantId
+                                                |> Dict.get entry.id
                                                 |> Maybe.unwrap []
                                                     (List.map
                                                         (\( receiverId, suggestedAmount, payment ) ->
-                                                            ( participants |> Participant.lookupName receiverId
+                                                            ( Participant.lookup receiverId participantModel.idToIndex participantModel.participants |> Participant.safeName receiverId
                                                             , receiverId
                                                             , ( suggestedAmount, payment )
                                                             )
@@ -163,7 +161,7 @@ viewBalances config participants model =
                                                                 div []
                                                                     [ Layout.internalLink
                                                                         (Payment.ApplySuggestedPayments
-                                                                            (Dict.singleton participantId [ ( receiverId, suggestedAmount, payment ) ])
+                                                                            (Dict.singleton entry.id [ ( receiverId, suggestedAmount, payment ) ])
                                                                             |> PaymentMsg
                                                                         )
                                                                         [ Html.text <|
@@ -229,46 +227,28 @@ subscriptions =
     .payment >> Payment.subscriptions >> Sub.map PaymentMsg
 
 
-update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update config msg model =
+update : Config -> Participant.Model -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config participantModel msg model =
     case msg of
         Disable ->
             ( ( { model | computed = Nothing }, False ), Cmd.none )
 
-        Enable participantIds expenseList ->
+        Enable participantIndex participants expenseList ->
             -- TODO Instead of enable/disable, detect if the expense list actually changed and only recompute if it did.
             --      If only the participant list changed, just add/remove the relevant balance entries.
             if Maybe.isJust model.computed then
                 ( ( model, False ), Cmd.none )
 
             else
-                let
-                    expenses =
-                        Expense.expensesFromList expenseList
-
-                    debts =
-                        Expense.invert expenses
-
-                    balance =
-                        participantIds
-                            |> List.foldl
-                                (\participant ->
-                                    (Dict.valueSum participant expenses - Dict.valueSum participant debts)
-                                        |> Dict.insert participant
-                                )
-                                Dict.empty
-                in
                 ( ( { model
                         | computed =
-                            Just
-                                { expenses = expenses
-                                , debts = debts
-                                , balance = balance
-                                , suggestedPayments =
-                                    -- The result value of sumValues only contains keys from the first argument.
-                                    Suggestion.autosuggestPayments (Dict.sumValues balance model.payment.paymentBalance)
-                                        |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId model.payment.payments payerId))
-                                }
+                            Just <|
+                                Settlement.compute
+                                    participantIndex
+                                    participants
+                                    expenseList
+                                    model.payment.paymentBalance
+                                    model.payment.payments
                     }
                   , False
                   )
@@ -289,7 +269,8 @@ update config msg model =
                                     (\computed ->
                                         { computed
                                             | suggestedPayments =
-                                                Suggestion.autosuggestPayments (Dict.sumValues computed.balance paymentModel.paymentBalance)
+                                                Dict.sumValues computed.balance paymentModel.paymentBalance
+                                                    |> Suggestion.autosuggestPayments
                                                     |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId))
                                         }
                                     )

@@ -9,13 +9,17 @@ type alias Balances =
     Dict Participant.Id Amount
 
 
-transferAmount : Participant.Id -> Participant.Id -> Amount -> Balances -> Balances
-transferAmount payerId receiverId amount =
-    addAmount payerId amount >> addAmount receiverId -amount
+
+-- TODO Document functions and that payment implies a reverse balance transfer.
 
 
-addAmount : Participant.Id -> Amount -> Balances -> Balances
-addAmount participantId amount =
+transfer : Participant.Id -> Participant.Id -> Amount -> Balances -> Balances
+transfer payerId receiverId amount =
+    add payerId amount >> add receiverId -amount
+
+
+add : Participant.Id -> Amount -> Balances -> Balances
+add participantId amount =
     Dict.update participantId (Maybe.withDefault 0 >> (+) amount >> Just)
 
 

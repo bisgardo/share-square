@@ -20,8 +20,8 @@ toField participant =
 
 type alias Model =
     { create : Maybe CreateModel
-    , participants : List Participant
-    , idToName : Dict Participant.Id String
+    , participants : List Participant -- TODO change to list of IDs and make it sorted again
+    , idToIndex : Participant.Index -- TODO change to dict from ID to participant (will make lookup "single-jump")
     , namesLowercase : Set String -- used for case-insensitive duplication check
     , nextId : Participant.Id
     }
@@ -36,7 +36,7 @@ init : ( Model, Cmd Msg )
 init =
     ( { create = Nothing
       , participants = []
-      , idToName = Dict.empty
+      , idToIndex = Dict.empty
       , namesLowercase = Set.empty
       , nextId = 1
       }
@@ -173,13 +173,12 @@ update msg model =
 
                 Ok value ->
                     let
-                        -- Keep the participant list sorted by name (case insensitively).
                         participants =
-                            model.participants ++ [ value ] |> List.sortBy .nameLowercase
+                            model.participants ++ [ value ]
                     in
                     ( ( { model
                             | participants = participants
-                            , idToName = model.idToName |> Dict.insert id value.name
+                            , idToIndex = model.idToIndex |> Dict.insert id (model.participants |> List.length)
                             , namesLowercase = model.namesLowercase |> Set.insert value.nameLowercase
                             , create = Nothing
                             , nextId = id + 1
@@ -197,9 +196,9 @@ import_ : List Participant -> Model -> Model
 import_ participants model =
     { model
         | participants = participants
-        , idToName =
+        , idToIndex =
             participants
-                |> List.foldl (\participant -> Dict.insert participant.id participant.name) Dict.empty
+                |> List.foldl (\participant result -> Dict.insert participant.id (result |> Dict.size) result) Dict.empty
         , namesLowercase =
             participants
                 |> List.map (.name >> String.toLower)

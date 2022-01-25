@@ -3,6 +3,7 @@ module Domain.Participant exposing (..)
 import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
+import List.Extra as List
 
 
 type alias Id =
@@ -52,11 +53,27 @@ encode participant =
         |> Encode.object
 
 
-lookupName : Id -> Dict Id String -> String
-lookupName id idToName =
-    case Dict.get id idToName of
-        Nothing ->
-            "<" ++ idToString id ++ ">"
+type alias Index =
+    Dict Id Int
 
-        Just name ->
-            name
+
+lookup : Id -> Index -> List Participant -> Maybe Participant
+lookup id idToIndex participants =
+    idToIndex
+        |> Dict.get id
+        |> Maybe.andThen (\index -> participants |> List.getAt index)
+
+
+safeName : Id -> Maybe Participant -> String
+safeName id participant =
+    case participant of
+        Nothing ->
+            id |> fallbackName
+
+        Just p ->
+            p.name
+
+
+fallbackName : Id -> String
+fallbackName id =
+    "<" ++ (id |> idToString) ++ ">"
