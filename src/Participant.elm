@@ -1,13 +1,12 @@
 module Participant exposing (..)
 
 import Dict exposing (Dict)
-import Domain.Participant as Participant exposing (Participant)
+import Domain.Participant as Participant exposing (Participant, Participants)
 import Html exposing (Html, text)
 import Html.Attributes
 import Html.Events exposing (onSubmit)
 import Layout exposing (..)
 import Maybe.Extra as Maybe
-import Set exposing (Set)
 import Util.Update as Update
 
 
@@ -20,37 +19,40 @@ toField participant =
 
 type alias Model =
     { create : Maybe CreateModel
-    , participants : List Participant
-    , idToName : Dict Participant.Id String
-    , namesLowercase : Set String -- used for case-insensitive duplication check
+    , order : List Participant.Id
+    , participants : Participants
     , nextId : Participant.Id
     }
 
 
 type alias CreateModel =
     { name : Validated Field
+    , participantNamesLower : List String
     }
 
 
 init : ( Model, Cmd Msg )
 init =
     ( { create = Nothing
-      , participants = []
-      , idToName = Dict.empty
-      , namesLowercase = Set.empty
+      , order = []
+      , participants = Dict.empty
       , nextId = 1
       }
     , Cmd.none
     )
 
 
-initCreate : CreateModel
-initCreate =
+initCreate : Model -> CreateModel
+initCreate model =
     { name =
         { key = "new-participant-name"
         , value = ""
         , feedback = None
         }
+    , participantNamesLower =
+        model.participants
+            |> Dict.values
+            |> List.map (.name >> String.toLower)
     }
 
 
@@ -120,7 +122,7 @@ update msg model =
         LoadCreate ->
             ( ( { model
                     | create =
-                        Just initCreate
+                        Just <| initCreate model
                 }
               , False
               )
@@ -141,7 +143,7 @@ update msg model =
                                         | name =
                                             { nameField
                                                 | value = name
-                                                , feedback = validateName model name
+                                                , feedback = validateName createModel.participantNamesLower name
                                             }
                                     }
                                 )
@@ -173,14 +175,18 @@ update msg model =
 
                 Ok value ->
                     let
-                        -- Keep the participant list sorted by name (case insensitively).
                         participants =
-                            model.participants ++ [ value ] |> List.sortBy .nameLowercase
+                            model.participants |> Dict.insert id value
+
+                        order =
+                            participants
+                                |> Dict.values
+                                |> List.sortBy (.name >> String.toLower)
+                                |> List.map .id
                     in
                     ( ( { model
-                            | participants = participants
-                            , idToName = model.idToName |> Dict.insert id value.name
-                            , namesLowercase = model.namesLowercase |> Set.insert value.nameLowercase
+                            | order = order
+                            , participants = participants
                             , create = Nothing
                             , nextId = id + 1
                         }
@@ -196,14 +202,13 @@ update msg model =
 import_ : List Participant -> Model -> Model
 import_ participants model =
     { model
-        | participants = participants
-        , idToName =
+        | order =
             participants
-                |> List.foldl (\participant -> Dict.insert participant.id participant.name) Dict.empty
-        , namesLowercase =
+                |> List.sortBy (.name >> String.toLower)
+                |> List.map .id
+        , participants =
             participants
-                |> List.map (.name >> String.toLower)
-                |> Set.fromList
+                |> List.foldl (\participant -> Dict.insert participant.id participant) Dict.empty
         , create = Nothing
         , nextId =
             1
@@ -220,7 +225,7 @@ create id name =
         Err "cannot create participant with empty name"
 
     else
-        Ok <| Participant.new id (name |> cleanName)
+        Ok <| Participant id (name |> cleanName)
 
 
 cleanName : String -> String
@@ -234,9 +239,9 @@ cleanName =
             )
 
 
-validateName : Model -> String -> Feedback
-validateName model name =
-    if model.namesLowercase |> Set.member (name |> String.toLower) then
+validateName : List String -> String -> Feedback
+validateName participantNamesLower name =
+    if participantNamesLower |> List.member (name |> String.toLower) then
         Error "Duplicate name."
 
     else

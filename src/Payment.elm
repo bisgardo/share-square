@@ -45,7 +45,7 @@ import_ payments model =
         , paymentBalance =
             payments
                 |> List.foldl
-                    (\payment -> Balance.transferAmount payment.payer payment.receiver payment.amount)
+                    (\payment -> Balance.transfer payment.payer payment.receiver payment.amount)
                     model.paymentBalance
         , nextId =
             1
@@ -183,8 +183,8 @@ view config participantModel model =
                         ( id
                         , Html.tr []
                             [ Html.td [] [ Html.text id ]
-                            , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.payer) ]
-                            , Html.td [] [ Html.text (participantModel.idToName |> Participant.lookupName payment.receiver) ]
+                            , Html.td [] [ Html.text (participantModel.participants |> Dict.get payment.payer |> Participant.safeName payment.payer) ]
+                            , Html.td [] [ Html.text (participantModel.participants |> Dict.get payment.receiver |> Participant.safeName payment.receiver) ]
                             , Html.td [] [ Html.text (payment.amount |> Amount.toString config.amount) ]
                             , Html.td []
                                 [ Html.input
@@ -231,8 +231,8 @@ viewCreateOpen participantModel =
         createModalId
         "Add payment"
         [ Html.Attributes.class "w-100"
-        , Html.Attributes.disabled (participantModel.participants |> List.isEmpty)
-        , Html.Events.onClick (participantModel.participants |> List.map .id |> LoadCreate)
+        , Html.Attributes.disabled (participantModel.order |> List.isEmpty)
+        , Html.Events.onClick (participantModel.order |> LoadCreate)
         ]
 
 
@@ -261,8 +261,9 @@ viewAdd : Config -> Participant.Model -> CreateModel -> List (Html Msg)
 viewAdd config participantModel model =
     let
         participantsFields =
-            participantModel.participants
-                |> List.map Participant.toField
+            participantModel.order
+                |> List.map (\participantId -> participantModel.participants |> Dict.get participantId |> Maybe.map Participant.toField)
+                |> Maybe.values
 
         ( payerFeedback, receiverFeedback, suggestedAmount ) =
             if model.payerId == model.receiverId then
@@ -275,14 +276,14 @@ viewAdd config participantModel model =
                             |> Maybe.unwrap None
                                 (\payerId ->
                                     Info <|
-                                        (participantModel.idToName |> Participant.lookupName payerId)
+                                        (participantModel.participants |> Dict.get payerId |> Participant.safeName payerId)
                                             ++ " doesn't owe anything."
                                 )
                         , receiverIdNotOwed
                             |> Maybe.unwrap None
                                 (\receiverId ->
                                     Info <|
-                                        (participantModel.idToName |> Participant.lookupName receiverId)
+                                        (participantModel.participants |> Dict.get receiverId |> Participant.safeName receiverId)
                                             ++ " isn't owed anything."
                                 )
                         , Nothing
@@ -557,7 +558,7 @@ update config balances msg model =
                                 model.payments ++ [ payment ]
                             , paymentBalance =
                                 model.paymentBalance
-                                    |> Balance.transferAmount payment.payer
+                                    |> Balance.transfer payment.payer
                                         payment.receiver
                                         payment.amount
                             , nextId = id + 1
@@ -579,7 +580,7 @@ update config balances msg model =
                         deletedPayments
                             |> List.foldl
                                 (\deletedPayment ->
-                                    Balance.transferAmount deletedPayment.receiver deletedPayment.payer deletedPayment.amount
+                                    Balance.transfer deletedPayment.receiver deletedPayment.payer deletedPayment.amount
                                 )
                                 model.paymentBalance
                 }
@@ -612,7 +613,7 @@ update config balances msg model =
                                                                    ]
                                                         , paymentBalance =
                                                             innerModelResult.paymentBalance
-                                                                |> Balance.transferAmount
+                                                                |> Balance.transfer
                                                                     payerId
                                                                     receiverId
                                                                     amount
@@ -637,7 +638,7 @@ update config balances msg model =
                                                                     )
                                                         , paymentBalance =
                                                             innerModelResult.paymentBalance
-                                                                |> Balance.transferAmount
+                                                                |> Balance.transfer
                                                                     payerId
                                                                     receiverId
                                                                     amount

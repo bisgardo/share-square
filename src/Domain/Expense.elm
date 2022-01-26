@@ -26,10 +26,10 @@ idToString =
 
 type alias Expense =
     { id : Int
-    , payer : Int
+    , payer : Participant.Id
     , amount : Amount
     , description : String
-    , receivers : Dict Int Float -- map from participant ID to fractional part
+    , receivers : Dict Participant.Id Float -- map from participant ID to fractional part
     }
 
 

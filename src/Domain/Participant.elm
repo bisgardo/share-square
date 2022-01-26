@@ -22,22 +22,13 @@ idToString =
 type alias Participant =
     { id : Id
     , name : String
-    , nameLowercase : String -- used for case-insensitive sorting
-    }
-
-
-new : Id -> String -> Participant
-new id name =
-    { id = id
-    , name = name
-    , nameLowercase = name |> String.toLower
     }
 
 
 decoder : Decoder Participant
 decoder =
     Decode.map2
-        new
+        Participant
         -- ID
         (Decode.field "i" Decode.int)
         -- name
@@ -52,11 +43,20 @@ encode participant =
         |> Encode.object
 
 
-lookupName : Id -> Dict Id String -> String
-lookupName id idToName =
-    case Dict.get id idToName of
-        Nothing ->
-            "<" ++ idToString id ++ ">"
+type alias Participants =
+    Dict Id Participant
 
-        Just name ->
-            name
+
+safeName : Id -> Maybe Participant -> String
+safeName id participant =
+    case participant of
+        Nothing ->
+            id |> fallbackName
+
+        Just p ->
+            p.name
+
+
+fallbackName : Id -> String
+fallbackName id =
+    "<" ++ (id |> idToString) ++ ">"
