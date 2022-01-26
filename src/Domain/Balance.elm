@@ -5,27 +5,28 @@ import Domain.Amount as Amount exposing (Amount)
 import Domain.Participant as Participant
 
 
+{-| A dictionary of balances for all participants.
+The balance of a participant is defined as the amount that the other participants collectively owe that participant.
+This is conceptually different from ordinary bank account balances which designates how much someone is allowed to spend.
+as spending money makes your balance to up (and vice versa).
+-}
 type alias Balances =
     Dict Participant.Id Amount
 
 
-
--- TODO Document functions and that payment implies a reverse balance transfer.
-
-
+{-| Transfer a given amount from the balance of one participant to another.
+Note that payment transfers increase the balance of the payer and reduces it for the receiver.
+-}
 transfer : Participant.Id -> Participant.Id -> Amount -> Balances -> Balances
 transfer payerId receiverId amount =
     add payerId amount >> add receiverId -amount
 
 
+{-| Increase the balance of a given participant by a given amount.
+-}
 add : Participant.Id -> Amount -> Balances -> Balances
 add participantId amount =
     Dict.update participantId (Maybe.withDefault 0 >> (+) amount >> Just)
-
-
-sum : Participant.Id -> Balances -> Balances -> Amount
-sum participantId paymentBalance balance =
-    (balance |> lookup participantId) + (paymentBalance |> lookup participantId)
 
 
 lookup : Participant.Id -> Balances -> Amount

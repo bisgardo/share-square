@@ -53,10 +53,10 @@ suggestPaymentAmount : Participant.Id -> Participant.Id -> Balances -> Balances 
 suggestPaymentAmount payerId receiverId paymentBalance balance =
     let
         payerBalance =
-            Balance.sum payerId paymentBalance balance
+            lookupBalanceSum payerId paymentBalance balance
 
         receiverBalance =
-            Balance.sum receiverId paymentBalance balance
+            lookupBalanceSum receiverId paymentBalance balance
 
         suggestedAmount =
             min -payerBalance receiverBalance
@@ -77,6 +77,11 @@ suggestPaymentAmount payerId receiverId paymentBalance balance =
 
     else
         Ok suggestedAmount
+
+
+lookupBalanceSum : Participant.Id -> Balances -> Balances -> Amount
+lookupBalanceSum participantId paymentBalance balance =
+    (balance |> Balance.lookup participantId) + (paymentBalance |> Balance.lookup participantId)
 
 
 findExistingPaymentId : Participant.Id -> Participant.Id -> List Payment -> Maybe ( Payment.Id, Bool )
