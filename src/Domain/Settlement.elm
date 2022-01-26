@@ -4,10 +4,9 @@ import Dict exposing (Dict)
 import Domain.Amount exposing (Amount)
 import Domain.Balance as Balance exposing (Balances)
 import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
-import Domain.Participant as Participant exposing (Participant)
+import Domain.Participant as Participant exposing (Participant, Participants)
 import Domain.Payment exposing (Payment)
 import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
-import Set
 import Util.Dict as Dict
 
 
@@ -19,8 +18,8 @@ type alias Computed =
     }
 
 
-compute : Participant.Index -> List Participant -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
-compute participantIndex participants expenseList paymentBalance payments =
+compute : Participants -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
+compute participants expenseList paymentBalance payments =
     let
         expenses =
             Expense.expensesFromList expenseList
@@ -30,6 +29,7 @@ compute participantIndex participants expenseList paymentBalance payments =
 
         balances =
             participants
+                |> Dict.values
                 |> List.map .id
                 |> List.foldl
                     (\participantId ->

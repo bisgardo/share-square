@@ -1,7 +1,7 @@
 module Participant exposing (..)
 
 import Dict exposing (Dict)
-import Domain.Participant as Participant exposing (Participant)
+import Domain.Participant as Participant exposing (Participant, Participants)
 import Html exposing (Html, text)
 import Html.Attributes
 import Html.Events exposing (onSubmit)
@@ -20,8 +20,8 @@ toField participant =
 
 type alias Model =
     { create : Maybe CreateModel
-    , participants : List Participant -- TODO change to list of IDs and make it sorted again
-    , idToIndex : Participant.Index -- TODO change to dict from ID to participant (will make lookup "single-jump")
+    , order : List Participant.Id
+    , participants : Participants
     , namesLowercase : Set String -- used for case-insensitive duplication check
     , nextId : Participant.Id
     }
@@ -35,8 +35,8 @@ type alias CreateModel =
 init : ( Model, Cmd Msg )
 init =
     ( { create = Nothing
-      , participants = []
-      , idToIndex = Dict.empty
+      , order = []
+      , participants = Dict.empty
       , namesLowercase = Set.empty
       , nextId = 1
       }
@@ -174,12 +174,17 @@ update msg model =
                 Ok value ->
                     let
                         participants =
-                            model.participants ++ [ value ]
+                            model.participants |> Dict.insert id value
+
+                        order =
+                            participants
+                                |> Dict.values
+                                |> List.sortBy (.name >> String.toLower)
+                                |> List.map .id
                     in
                     ( ( { model
-                            | participants = participants
-                            , idToIndex = model.idToIndex |> Dict.insert id (model.participants |> List.length)
-                            , namesLowercase = model.namesLowercase |> Set.insert value.nameLowercase
+                            | order = order
+                            , participants = participants
                             , create = Nothing
                             , nextId = id + 1
                         }
@@ -195,10 +200,13 @@ update msg model =
 import_ : List Participant -> Model -> Model
 import_ participants model =
     { model
-        | participants = participants
-        , idToIndex =
+        | order =
             participants
-                |> List.foldl (\participant result -> Dict.insert participant.id (result |> Dict.size) result) Dict.empty
+                |> List.sortBy (.name >> String.toLower)
+                |> List.map .id
+        , participants =
+            participants
+                |> List.foldl (\participant -> Dict.insert participant.id participant) Dict.empty
         , namesLowercase =
             participants
                 |> List.map (.name >> String.toLower)
@@ -219,7 +227,7 @@ create id name =
         Err "cannot create participant with empty name"
 
     else
-        Ok <| Participant.new id (name |> cleanName)
+        Ok <| Participant id (name |> cleanName)
 
 
 cleanName : String -> String

@@ -4,7 +4,7 @@ import Config exposing (Config)
 import Dict exposing (Dict)
 import Domain.Amount as Amount exposing (Amount)
 import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
-import Domain.Participant as Participant exposing (Participant)
+import Domain.Participant as Participant exposing (Participant, Participants)
 import Domain.Payment as Payment exposing (Payment)
 import Domain.Settlement as Settlement
 import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
@@ -48,7 +48,7 @@ import_ payments model =
 
 type Msg
     = Disable
-    | Enable Participant.Index (List Participant) (List Expense)
+    | Enable Participants (List Expense)
     | PaymentMsg Payment.Msg
 
 
@@ -104,7 +104,7 @@ viewBalances config participantModel model =
                                 (\( participantId, totalBalance ) ->
                                     let
                                         participant =
-                                            Participant.lookup participantId participantModel.idToIndex participantModel.participants
+                                            participantModel.participants |> Dict.get participantId
 
                                         participantName =
                                             participant |> Participant.safeName participantId
@@ -149,7 +149,7 @@ viewBalances config participantModel model =
                                                 |> Maybe.unwrap []
                                                     (List.map
                                                         (\( receiverId, suggestedAmount, payment ) ->
-                                                            ( Participant.lookup receiverId participantModel.idToIndex participantModel.participants |> Participant.safeName receiverId
+                                                            ( participantModel.participants |> Dict.get receiverId |> Participant.safeName receiverId
                                                             , receiverId
                                                             , ( suggestedAmount, payment )
                                                             )
@@ -227,13 +227,13 @@ subscriptions =
     .payment >> Payment.subscriptions >> Sub.map PaymentMsg
 
 
-update : Config -> Participant.Model -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update config participantModel msg model =
+update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config msg model =
     case msg of
         Disable ->
             ( ( { model | computed = Nothing }, False ), Cmd.none )
 
-        Enable participantIndex participants expenseList ->
+        Enable participants expenseList ->
             -- TODO Instead of enable/disable, detect if the expense list actually changed and only recompute if it did.
             --      If only the participant list changed, just add/remove the relevant balance entries.
             if Maybe.isJust model.computed then
@@ -244,7 +244,6 @@ update config participantModel msg model =
                         | computed =
                             Just <|
                                 Settlement.compute
-                                    participantIndex
                                     participants
                                     expenseList
                                     model.payment.paymentBalance

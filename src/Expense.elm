@@ -178,7 +178,7 @@ view config model =
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Description" ]
                 , Html.th
                     [ Html.Attributes.scope "col"
-                    , Html.Attributes.colspan (model.participant.participants |> List.length |> max 1)
+                    , Html.Attributes.colspan (model.participant.order |> List.length |> max 1)
                     ]
                     [ Html.text "Participants" ]
                 , Html.td [] []
@@ -189,11 +189,17 @@ view config model =
                 , ( "amount", Html.td [] [] )
                 , ( "description", Html.td [] [] )
                 ]
-                    ++ (model.participant.participants
+                    ++ (model.participant.order
                             |> List.map
-                                (\participant ->
-                                    ( participant.id |> Participant.idToString
-                                    , Html.td [] [ Html.text participant.name ]
+                                (\participantId ->
+                                    ( participantId |> Participant.idToString
+                                    , Html.td []
+                                        [ Html.text
+                                            (model.participant.participants
+                                                |> Dict.get participantId
+                                                |> Participant.safeName participantId
+                                            )
+                                        ]
                                     )
                                 )
                             |> (\htmls ->
@@ -229,7 +235,7 @@ view config model =
                         ( id
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
-                             , Html.td [] [ Html.text (Participant.lookup expense.payer model.participant.idToIndex model.participant.participants |> Participant.safeName expense.payer) ]
+                             , Html.td [] [ Html.text (model.participant.participants |> Dict.get expense.payer |> Participant.safeName expense.payer) ]
                              , Html.td []
                                 [ Html.span
                                     [ data "bs-toggle" "tooltip"
@@ -241,17 +247,18 @@ view config model =
                                 ]
                              , Html.td [] [ Html.text expense.description ]
                              ]
-                                ++ List.map
-                                    (\participant ->
-                                        Html.td []
-                                            (if Dict.member participant.id expense.receivers then
-                                                [ Html.text "✓" ]
+                                ++ (model.participant.order
+                                        |> List.map
+                                            (\participantId ->
+                                                Html.td []
+                                                    (if Dict.member participantId expense.receivers then
+                                                        [ Html.text "✓" ]
 
-                                             else
-                                                []
+                                                     else
+                                                        []
+                                                    )
                                             )
-                                    )
-                                    model.participant.participants
+                                   )
                                 ++ [ Html.td
                                         [ Html.Attributes.align "right", Html.Events.onClick (LoadCreate (Just expense.id)) ]
                                         [ Html.a
@@ -296,7 +303,7 @@ viewCreateOpen : Model -> Html Msg
 viewCreateOpen model =
     let
         disabled =
-            model.participant.participants |> List.isEmpty
+            model.participant.order |> List.isEmpty
 
         html =
             openModalButton
@@ -344,8 +351,9 @@ viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
 viewAdd participantModel model =
     let
         participantsFields =
-            participantModel.participants
-                |> List.map Participant.toField
+            participantModel.order
+                |> List.map (\participantId -> participantModel.participants |> Dict.get participantId |> Maybe.map Participant.toField)
+                |> Maybe.values
     in
     [ optionsInput "new-expense-payer" "Payer" { fields = participantsFields, feedback = None } model.payerId CreateEditPayer
     , textInput "Amount" model.amount CreateEditAmount
@@ -382,16 +390,15 @@ update config msg model =
                 createModel =
                     case editId of
                         Nothing ->
-                            model.participant.participants
+                            model.participant.order
                                 |> List.head
                                 |> Maybe.map
-                                    (\firstParticipant ->
+                                    (\firstParticipantId ->
                                         initCreate
-                                            (firstParticipant.id |> Participant.idToString)
+                                            (firstParticipantId |> Participant.idToString)
                                             (model.participant.participants
-                                                |> List.map (.id >> Participant.idToString)
-                                                |> List.map (\key -> ( key, 1.0 ))
-                                                |> Dict.fromList
+                                                |> Dict.mapKeys Participant.idToString
+                                                |> Dict.map (\_ _ -> 1.0)
                                             )
                                     )
 

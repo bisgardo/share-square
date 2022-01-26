@@ -3,7 +3,6 @@ module Domain.Participant exposing (..)
 import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import List.Extra as List
 
 
 type alias Id =
@@ -23,22 +22,13 @@ idToString =
 type alias Participant =
     { id : Id
     , name : String
-    , nameLowercase : String -- used for case-insensitive sorting
-    }
-
-
-new : Id -> String -> Participant
-new id name =
-    { id = id
-    , name = name
-    , nameLowercase = name |> String.toLower
     }
 
 
 decoder : Decoder Participant
 decoder =
     Decode.map2
-        new
+        Participant
         -- ID
         (Decode.field "i" Decode.int)
         -- name
@@ -53,15 +43,8 @@ encode participant =
         |> Encode.object
 
 
-type alias Index =
-    Dict Id Int
-
-
-lookup : Id -> Index -> List Participant -> Maybe Participant
-lookup id idToIndex participants =
-    idToIndex
-        |> Dict.get id
-        |> Maybe.andThen (\index -> participants |> List.getAt index)
+type alias Participants =
+    Dict Id Participant
 
 
 safeName : Id -> Maybe Participant -> String

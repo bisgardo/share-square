@@ -3,6 +3,7 @@ module Main exposing (main)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Config exposing (Config)
+import Dict
 import Domain.Expense as Expense exposing (Expense)
 import Domain.Participant as Participant exposing (Participant)
 import Domain.Payment as Payment exposing (Payment)
@@ -419,7 +420,6 @@ viewContent model =
                     , data "bs-target" ("#" ++ tabIds.settlement)
                     , Html.Attributes.class "nav-link"
                     , Settlement.Enable
-                        model.expense.participant.idToIndex
                         model.expense.participant.participants
                         model.expense.expenses
                         |> ComputationMsg
@@ -491,7 +491,7 @@ update msg model =
                 ( ( computationModel, computationModelChanged ), computationCmd ) =
                     if expenseModelChanged then
                         model.computation
-                            |> Settlement.update model.config model.expense.participant Settlement.Disable
+                            |> Settlement.update model.config Settlement.Disable
 
                     else
                         ( ( model.computation, False ), Cmd.none )
@@ -514,7 +514,7 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Settlement.update model.config model.expense.participant computationMsg
+                    model.computation |> Settlement.update model.config computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch
@@ -617,7 +617,10 @@ import_ revision values model =
 
 export : Model -> StorageValues
 export model =
-    { participants = model.expense.participant.participants
+    { participants =
+        model.expense.participant.participants
+            |> Dict.values
+            |> List.sortBy .id
     , expenses = model.expense.expenses
     , payments = model.computation.payment.payments
     , config = { decimalPlaces = model.config.amount.decimalPlaces }

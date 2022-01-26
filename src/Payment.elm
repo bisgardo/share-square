@@ -183,8 +183,8 @@ view config participantModel model =
                         ( id
                         , Html.tr []
                             [ Html.td [] [ Html.text id ]
-                            , Html.td [] [ Html.text (Participant.lookup payment.payer participantModel.idToIndex participantModel.participants |> Participant.safeName payment.payer) ]
-                            , Html.td [] [ Html.text (Participant.lookup payment.receiver participantModel.idToIndex participantModel.participants |> Participant.safeName payment.receiver) ]
+                            , Html.td [] [ Html.text (participantModel.participants |> Dict.get payment.payer |> Participant.safeName payment.payer) ]
+                            , Html.td [] [ Html.text (participantModel.participants |> Dict.get payment.receiver |> Participant.safeName payment.receiver) ]
                             , Html.td [] [ Html.text (payment.amount |> Amount.toString config.amount) ]
                             , Html.td []
                                 [ Html.input
@@ -231,8 +231,8 @@ viewCreateOpen participantModel =
         createModalId
         "Add payment"
         [ Html.Attributes.class "w-100"
-        , Html.Attributes.disabled (participantModel.participants |> List.isEmpty)
-        , Html.Events.onClick (participantModel.participants |> List.map .id |> LoadCreate)
+        , Html.Attributes.disabled (participantModel.order |> List.isEmpty)
+        , Html.Events.onClick (participantModel.order |> LoadCreate)
         ]
 
 
@@ -261,8 +261,9 @@ viewAdd : Config -> Participant.Model -> CreateModel -> List (Html Msg)
 viewAdd config participantModel model =
     let
         participantsFields =
-            participantModel.participants
-                |> List.map Participant.toField
+            participantModel.order
+                |> List.map (\participantId -> participantModel.participants |> Dict.get participantId |> Maybe.map Participant.toField)
+                |> Maybe.values
 
         ( payerFeedback, receiverFeedback, suggestedAmount ) =
             if model.payerId == model.receiverId then
@@ -275,14 +276,14 @@ viewAdd config participantModel model =
                             |> Maybe.unwrap None
                                 (\payerId ->
                                     Info <|
-                                        (Participant.lookup payerId participantModel.idToIndex participantModel.participants |> Participant.safeName payerId)
+                                        (participantModel.participants |> Dict.get payerId |> Participant.safeName payerId)
                                             ++ " doesn't owe anything."
                                 )
                         , receiverIdNotOwed
                             |> Maybe.unwrap None
                                 (\receiverId ->
                                     Info <|
-                                        (Participant.lookup receiverId participantModel.idToIndex participantModel.participants |> Participant.safeName receiverId)
+                                        (participantModel.participants |> Dict.get receiverId |> Participant.safeName receiverId)
                                             ++ " isn't owed anything."
                                 )
                         , Nothing
