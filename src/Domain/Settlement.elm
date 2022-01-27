@@ -18,7 +18,7 @@ type alias Computed =
     }
 
 
-compute : Participants -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
+compute : List Participant -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
 compute participants expenseList paymentBalance payments =
     let
         expenses =
@@ -29,7 +29,6 @@ compute participants expenseList paymentBalance payments =
 
         balances =
             participants
-                |> Dict.values
                 |> List.map .id
                 |> List.foldl
                     (\participantId ->
@@ -41,6 +40,7 @@ compute participants expenseList paymentBalance payments =
         suggestedPayments =
             -- The result value of sumValues only contains keys from the first argument.
             Dict.sumValues balances paymentBalance
+                |> applySettledBy participants
                 |> Suggestion.autosuggestPayments
                 |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId payments payerId))
     in
@@ -49,3 +49,38 @@ compute participants expenseList paymentBalance payments =
     , balance = balances
     , suggestedPayments = suggestedPayments
     }
+
+
+applySettledBy : List Participant -> Balances -> Balances
+applySettledBy participants balances =
+    participants
+        |> List.foldl
+            (\participant ->
+                --case participant |> Participant.resolveSettledBy participantIndex participants Set.empty of
+                case participant.settledBy of
+                    Nothing ->
+                        identity
+
+                    Just settledById ->
+                        Balance.transfer
+                            settledById
+                            participant.id
+                            (balances |> Dict.get participant.id |> Maybe.withDefault 0)
+            )
+            balances
+
+
+
+--resolveSettledByMapping : Participants-> List Participant -> Dict Participant.Id Participant.Id
+--resolveSettledByMapping participantIndex participants =
+--    participants
+--        |> List.foldl
+--            (\participant ->
+--                case participant |> Participant.resolveSettledBy participantIndex Set.empty of
+--                    Nothing ->
+--                        identity
+--
+--                    Just settledById ->
+--                        Dict.insert participant.id settledById
+--            )
+--            Dict.empty

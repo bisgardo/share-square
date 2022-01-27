@@ -420,7 +420,7 @@ viewContent model =
                     , data "bs-target" ("#" ++ tabIds.settlement)
                     , Html.Attributes.class "nav-link"
                     , Settlement.Enable
-                        model.expense.participant.participants
+                        (model.expense.participant.participants |> Dict.values)
                         model.expense.expenses
                         |> ComputationMsg
                         |> Html.Events.onClick
@@ -491,7 +491,7 @@ update msg model =
                 ( ( computationModel, computationModelChanged ), computationCmd ) =
                     if expenseModelChanged then
                         model.computation
-                            |> Settlement.update model.config Settlement.Disable
+                            |> Settlement.update model.config model.expense.participant Settlement.Disable
 
                     else
                         ( ( model.computation, False ), Cmd.none )
@@ -514,7 +514,7 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Settlement.update model.config computationMsg
+                    model.computation |> Settlement.update model.config model.expense.participant computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch

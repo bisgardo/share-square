@@ -27,7 +27,7 @@ type alias Model =
 
 type alias CreateModel =
     { name : Validated Field
-    , participantNamesLower : List String
+    , participantNamesLower : List String -- used for case-insensitive duplication check
     }
 
 
@@ -225,7 +225,7 @@ create id name =
         Err "cannot create participant with empty name"
 
     else
-        Ok <| Participant id (name |> cleanName)
+        Ok <| Participant id (name |> cleanName) Nothing
 
 
 cleanName : String -> String

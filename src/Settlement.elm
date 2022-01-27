@@ -48,7 +48,7 @@ import_ payments model =
 
 type Msg
     = Disable
-    | Enable Participants (List Expense)
+    | Enable (List Participant) (List Expense)
     | PaymentMsg Payment.Msg
 
 
@@ -99,6 +99,7 @@ viewBalances config participantModel model =
                 |> Maybe.unwrap []
                     (\computed ->
                         Dict.sumValues computed.balance model.payment.paymentBalance
+                            |> Settlement.applySettledBy (participantModel.participants |> Dict.values)
                             |> Dict.toList
                             |> List.map
                                 (\( participantId, totalBalance ) ->
@@ -137,11 +138,20 @@ viewBalances config participantModel model =
                                                 Nothing ->
                                                     text <| "N/A"
 
-                                                Just _ ->
-                                                    text
-                                                        (entry.totalBalance
-                                                            |> Amount.toStringSigned "+" config.amount
-                                                        )
+                                                Just participant ->
+                                                    case participant.settledBy of
+                                                        Nothing ->
+                                                            text
+                                                                (entry.totalBalance
+                                                                    |> Amount.toStringSigned "+" config.amount
+                                                                )
+
+                                                        Just settlerId ->
+                                                            let
+                                                                settlerName =
+                                                                    participantModel.participants |> Dict.get settlerId |> Participant.safeName settlerId
+                                                            in
+                                                            Html.i [] [ text <| "Settled by " ++ settlerName ++ " (" ++ (entry.totalBalance |> Amount.toStringSigned "+" config.amount) ++ ")" ]
                                             ]
                                         , Html.td []
                                             (computed.suggestedPayments
@@ -227,8 +237,8 @@ subscriptions =
     .payment >> Payment.subscriptions >> Sub.map PaymentMsg
 
 
-update : Config -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update config msg model =
+update : Config -> Participant.Model -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config participantModel msg model =
     case msg of
         Disable ->
             ( ( { model | computed = Nothing }, False ), Cmd.none )
@@ -269,6 +279,7 @@ update config msg model =
                                         { computed
                                             | suggestedPayments =
                                                 Dict.sumValues computed.balance paymentModel.paymentBalance
+                                                    |> Settlement.applySettledBy (participantModel.participants |> Dict.values)
                                                     |> Suggestion.autosuggestPayments
                                                     |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId))
                                         }
