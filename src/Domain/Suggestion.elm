@@ -49,41 +49,6 @@ autosuggestPayment =
             )
 
 
-suggestPaymentAmount : Participant.Id -> Participant.Id -> Balances -> Balances -> Result ( Maybe Participant.Id, Maybe Participant.Id ) Amount
-suggestPaymentAmount payerId receiverId paymentBalance balance =
-    let
-        payerBalance =
-            lookupBalanceSum payerId paymentBalance balance
-
-        receiverBalance =
-            lookupBalanceSum receiverId paymentBalance balance
-
-        suggestedAmount =
-            min -payerBalance receiverBalance
-    in
-    if suggestedAmount <= 0 then
-        Err
-            ( if payerBalance >= 0 then
-                Just payerId
-
-              else
-                Nothing
-            , if receiverBalance <= 0 then
-                Just receiverId
-
-              else
-                Nothing
-            )
-
-    else
-        Ok suggestedAmount
-
-
-lookupBalanceSum : Participant.Id -> Balances -> Balances -> Amount
-lookupBalanceSum participantId paymentBalance balance =
-    (balance |> Balance.lookup participantId) + (paymentBalance |> Balance.lookup participantId)
-
-
 findExistingPaymentId : Participant.Id -> Participant.Id -> List Payment -> Maybe ( Payment.Id, Bool )
 findExistingPaymentId payerId receiverId payments =
     case payments of
