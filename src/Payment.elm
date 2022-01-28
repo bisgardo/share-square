@@ -110,7 +110,7 @@ initCreate initId =
         , value = ""
         , feedback = None
         }
-    , suggestedAmounts = Nothing
+    , suggestedPayment = Nothing
     , done = True
     }
 
@@ -119,7 +119,7 @@ type alias CreateModel =
     { payerId : String
     , receiverId : String
     , amount : Validated Field
-    , suggestedAmounts : Maybe PaymentSuggestion
+    , suggestedPayment : Maybe PaymentSuggestion
     , done : Bool
     }
 
@@ -260,17 +260,22 @@ viewCreateModal config participantModel model =
 viewAdd : Config -> Participant.Model -> CreateModel -> List (Html Msg)
 viewAdd config participantModel model =
     let
+        amount =
+            model.amount.value
+                |> Amount.fromString config.amount
+                |> Maybe.withDefault 0
+
         participantsFields =
             participantModel.order
                 |> List.map (\participantId -> participantModel.participants |> Dict.get participantId |> Maybe.map Participant.toField)
                 |> Maybe.values
 
-        ( payerFeedback, receiverFeedback, suggestedAmounts ) =
+        ( payerFeedback, receiverFeedback, suggestedPayments ) =
             if model.payerId == model.receiverId then
                 ( None, Error "Receiver must be different from payer.", [] )
 
             else
-                case model.suggestedAmounts of
+                case model.suggestedPayment of
                     Nothing ->
                         ( None, None, [] )
 
@@ -289,13 +294,7 @@ viewAdd config participantModel model =
 
                           else
                             None
-                        , let
-                            amount =
-                                model.amount.value
-                                    |> Amount.fromString config.amount
-                                    |> Maybe.withDefault 0
-                          in
-                          [ { label = "Payer owes"
+                        , [ { label = "Payer owes"
                             , amount = suggestedPayment.payerOwingAmount
                             , selected = suggestedPayment.payerOwingAmount == amount
                             }
@@ -319,7 +318,7 @@ viewAdd config participantModel model =
         CreateEditReceiver
     , div
         ([ Html.Attributes.class "row mb-3" ]
-            ++ (if suggestedAmounts |> List.isEmpty then
+            ++ (if suggestedPayments |> List.isEmpty then
                     [ Html.Attributes.class "d-none" ]
 
                 else
@@ -328,7 +327,7 @@ viewAdd config participantModel model =
         )
         [ div [ Html.Attributes.class "col-sm-3" ] []
         , div [ Html.Attributes.class "col-sm-9" ]
-            (suggestedAmounts
+            (suggestedPayments
                 |> List.map
                     (\suggestedAmount ->
                         let
@@ -348,6 +347,34 @@ viewAdd config participantModel model =
             )
         ]
     , textInput "Amount" model.amount CreateEditAmount
+    , let
+        suggestedAmounts =
+            if model.amount.value |> String.isEmpty then
+                Nothing
+
+            else
+                model.suggestedPayment
+      in
+      div
+        ([ Html.Attributes.class "row mb-3" ]
+            ++ (if suggestedAmounts |> Maybe.isNothing then
+                    [ Html.Attributes.class "d-none" ]
+
+                else
+                    []
+               )
+        )
+        [ div [ Html.Attributes.class "col-sm-3" ] []
+        , div [ Html.Attributes.class "col-sm-9 text-muted" ] <|
+            case suggestedAmounts of
+                Nothing ->
+                    []
+
+                Just suggestedPayment ->
+                    [ div [] [ text <| "Payer balance after payment: " ++ (-suggestedPayment.payerOwingAmount + amount |> Amount.toString config.amount) ]
+                    , div [] [ text <| "Receiver balance after payment: " ++ (suggestedPayment.receiverOwedAmount - amount |> Amount.toString config.amount) ]
+                    ]
+        ]
     , Html.fieldset [ Html.Attributes.class "row mb-3" ]
         [ Html.label
             [ Html.Attributes.class "col-form-label col-sm-3 pt-0"
@@ -375,12 +402,12 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : Config -> Maybe Balances -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update : Config -> Balances -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update config balances msg model =
     case msg of
         LoadCreate participants ->
             let
-                (( firstParticipantFallback, secondParticipantFallback ) as fallbackResult) =
+                ( firstParticipantFallback, secondParticipantFallback ) =
                     case participants of
                         firstParticipant :: secondParticipant :: _ ->
                             ( Just firstParticipant, Just secondParticipant )
@@ -389,35 +416,30 @@ update config balances msg model =
                             ( Nothing, Nothing )
 
                 ( firstNegativeBalanceParticipant, firstPositiveBalanceParticipant ) =
-                    case balances of
-                        Nothing ->
-                            fallbackResult
+                    balances
+                        |> Dict.foldl
+                            (\participantId participantBalance ( negativeResult, positiveResult ) ->
+                                let
+                                    totalBalance =
+                                        participantBalance + Balance.lookup participantId model.paymentBalance
 
-                        Just participantBalances ->
-                            participantBalances
-                                |> Dict.foldl
-                                    (\participantId participantBalance ( negativeResult, positiveResult ) ->
-                                        let
-                                            totalBalance =
-                                                participantBalance + Balance.lookup participantId model.paymentBalance
+                                    updateResult isValid result =
+                                        case result of
+                                            Nothing ->
+                                                if isValid totalBalance then
+                                                    Just participantId
 
-                                            updateResult isValid result =
-                                                case result of
-                                                    Nothing ->
-                                                        if isValid totalBalance then
-                                                            Just participantId
+                                                else
+                                                    Nothing
 
-                                                        else
-                                                            Nothing
-
-                                                    Just _ ->
-                                                        result
-                                        in
-                                        ( updateResult Number.isNegative negativeResult
-                                        , updateResult Number.isPositive positiveResult
-                                        )
-                                    )
-                                    ( Nothing, Nothing )
+                                            Just _ ->
+                                                result
+                                in
+                                ( updateResult Number.isNegative negativeResult
+                                , updateResult Number.isPositive positiveResult
+                                )
+                            )
+                            ( Nothing, Nothing )
             in
             ( ( { model
                     | create =
@@ -460,14 +482,14 @@ update config balances msg model =
                                 (\createModel ->
                                     { createModel
                                         | payerId = payerId
-                                        , suggestedAmounts =
-                                            balances
-                                                |> Maybe.map
-                                                    (suggestPaymentAmounts
+                                        , suggestedPayment =
+                                            Just
+                                                (balances
+                                                    |> suggestPaymentAmounts
                                                         payerId
                                                         createModel.receiverId
                                                         model.paymentBalance
-                                                    )
+                                                )
                                     }
                                 )
                 }
@@ -484,14 +506,14 @@ update config balances msg model =
                                 (\createModel ->
                                     { createModel
                                         | receiverId = receiverId
-                                        , suggestedAmounts =
-                                            balances
-                                                |> Maybe.map
-                                                    (suggestPaymentAmounts
+                                        , suggestedPayment =
+                                            Just
+                                                (balances
+                                                    |> suggestPaymentAmounts
                                                         createModel.payerId
                                                         receiverId
                                                         model.paymentBalance
-                                                    )
+                                                )
                                     }
                                 )
                 }
