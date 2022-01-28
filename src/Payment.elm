@@ -110,7 +110,7 @@ initCreate initId =
         , value = ""
         , feedback = None
         }
-    , suggestedAmount = Err ( Nothing, Nothing )
+    , suggestedAmounts = Nothing
     , done = True
     }
 
@@ -119,7 +119,7 @@ type alias CreateModel =
     { payerId : String
     , receiverId : String
     , amount : Validated Field
-    , suggestedAmount : Result ( Maybe Participant.Id, Maybe Participant.Id ) Amount
+    , suggestedAmounts : Maybe PaymentSuggestion
     , done : Bool
     }
 
@@ -265,39 +265,46 @@ viewAdd config participantModel model =
                 |> List.map (\participantId -> participantModel.participants |> Dict.get participantId |> Maybe.map Participant.toField)
                 |> Maybe.values
 
-        ( payerFeedback, receiverFeedback, suggestedAmount ) =
+        ( payerFeedback, receiverFeedback, suggestedAmounts ) =
             if model.payerId == model.receiverId then
-                ( None, Error "Receiver must be different from payer.", Nothing )
+                ( None, Error "Receiver must be different from payer.", [] )
 
             else
-                case model.suggestedAmount of
-                    Err ( payerIdNotOwing, receiverIdNotOwed ) ->
-                        ( payerIdNotOwing
-                            |> Maybe.unwrap None
-                                (\payerId ->
-                                    Info <|
-                                        (participantModel.participants |> Dict.get payerId |> Participant.safeName payerId)
-                                            ++ " doesn't owe anything."
-                                )
-                        , receiverIdNotOwed
-                            |> Maybe.unwrap None
-                                (\receiverId ->
-                                    Info <|
-                                        (participantModel.participants |> Dict.get receiverId |> Participant.safeName receiverId)
-                                            ++ " isn't owed anything."
-                                )
-                        , Nothing
-                        )
+                case model.suggestedAmounts of
+                    Nothing ->
+                        ( None, None, [] )
 
-                    Ok amount ->
-                        ( None
-                        , None
-                        , if amount == (model.amount.value |> Amount.fromString config.amount |> Maybe.withDefault 0) then
-                            -- Amount is already the suggested value.
-                            Nothing
+                    Just suggestedPayment ->
+                        ( if suggestedPayment.payerOwingAmount <= 0 then
+                            Info <|
+                                (participantModel.participants |> Dict.get suggestedPayment.payerId |> Participant.safeName suggestedPayment.payerId)
+                                    ++ " doesn't owe anything."
 
                           else
-                            Just amount
+                            None
+                        , if suggestedPayment.receiverOwedAmount <= 0 then
+                            Info <|
+                                (participantModel.participants |> Dict.get suggestedPayment.receiverId |> Participant.safeName suggestedPayment.receiverId)
+                                    ++ " isn't owed anything."
+
+                          else
+                            None
+                        , let
+                            amount =
+                                model.amount.value
+                                    |> Amount.fromString config.amount
+                                    |> Maybe.withDefault 0
+                          in
+                          [ { label = "Payer owes"
+                            , amount = suggestedPayment.payerOwingAmount
+                            , selected = suggestedPayment.payerOwingAmount == amount
+                            }
+                          , { label = "Receiver is owed"
+                            , amount = suggestedPayment.receiverOwedAmount
+                            , selected = suggestedPayment.receiverOwedAmount == amount
+                            }
+                          ]
+                            |> List.filter (.amount >> Number.isPositive)
                         )
     in
     [ optionsInput "new-payments-payer"
@@ -312,7 +319,7 @@ viewAdd config participantModel model =
         CreateEditReceiver
     , div
         ([ Html.Attributes.class "row mb-3" ]
-            ++ (if Maybe.isNothing suggestedAmount then
+            ++ (if suggestedAmounts |> List.isEmpty then
                     [ Html.Attributes.class "d-none" ]
 
                 else
@@ -320,16 +327,25 @@ viewAdd config participantModel model =
                )
         )
         [ div [ Html.Attributes.class "col-sm-3" ] []
-        , div [ Html.Attributes.class "col-sm-9" ] <|
-            case suggestedAmount of
-                Nothing ->
-                    []
+        , div [ Html.Attributes.class "col-sm-9" ]
+            (suggestedAmounts
+                |> List.map
+                    (\suggestedAmount ->
+                        let
+                            label =
+                                suggestedAmount.label ++ ": " ++ (suggestedAmount.amount |> Amount.toString config.amount)
+                        in
+                        div []
+                            [ if suggestedAmount.selected then
+                                Html.b [] [ text label ]
 
-                Just amount ->
-                    [ Layout.internalLink
-                        (CreateApplySuggestedAmount amount)
-                        [ text <| "Balance difference: " ++ (amount |> Amount.toString config.amount) ]
-                    ]
+                              else
+                                Layout.internalLink
+                                    (CreateApplySuggestedAmount suggestedAmount.amount)
+                                    [ text <| suggestedAmount.label ++ ": " ++ (suggestedAmount.amount |> Amount.toString config.amount) ]
+                            ]
+                    )
+            )
         ]
     , textInput "Amount" model.amount CreateEditAmount
     , Html.fieldset [ Html.Attributes.class "row mb-3" ]
@@ -444,10 +460,10 @@ update config balances msg model =
                                 (\createModel ->
                                     { createModel
                                         | payerId = payerId
-                                        , suggestedAmount =
+                                        , suggestedAmounts =
                                             balances
-                                                |> Maybe.unwrap (Err ( Nothing, Nothing ))
-                                                    (suggestPaymentAmount
+                                                |> Maybe.map
+                                                    (suggestPaymentAmounts
                                                         payerId
                                                         createModel.receiverId
                                                         model.paymentBalance
@@ -468,10 +484,10 @@ update config balances msg model =
                                 (\createModel ->
                                     { createModel
                                         | receiverId = receiverId
-                                        , suggestedAmount =
+                                        , suggestedAmounts =
                                             balances
-                                                |> Maybe.unwrap (Err ( Nothing, Nothing ))
-                                                    (suggestPaymentAmount
+                                                |> Maybe.map
+                                                    (suggestPaymentAmounts
                                                         createModel.payerId
                                                         receiverId
                                                         model.paymentBalance
@@ -694,9 +710,37 @@ validatePaymentAmount amount =
         None
 
 
-suggestPaymentAmount : String -> String -> Balances -> Balances -> Result ( Maybe Participant.Id, Maybe Participant.Id ) Amount
-suggestPaymentAmount payer receiver =
+type alias PaymentSuggestion =
+    { payerId : Participant.Id
+    , receiverId : Participant.Id
+    , payerOwingAmount : Amount
+    , receiverOwedAmount : Amount
+    }
+
+
+suggestPaymentAmounts : String -> String -> Balances -> Balances -> PaymentSuggestion
+suggestPaymentAmounts payer receiver paymentBalance balance =
     -- TODO Return error if ID parsing fails.
-    Suggestion.suggestPaymentAmount
-        (payer |> Participant.idFromString |> Maybe.withDefault 0)
-        (receiver |> Participant.idFromString |> Maybe.withDefault 0)
+    let
+        payerId =
+            payer |> Participant.idFromString |> Maybe.withDefault 0
+
+        receiverId =
+            receiver |> Participant.idFromString |> Maybe.withDefault 0
+
+        payerBalance =
+            lookupBalanceSum payerId paymentBalance balance
+
+        receiverBalance =
+            lookupBalanceSum receiverId paymentBalance balance
+    in
+    { payerId = payerId
+    , receiverId = receiverId
+    , payerOwingAmount = -payerBalance
+    , receiverOwedAmount = receiverBalance
+    }
+
+
+lookupBalanceSum : Participant.Id -> Balances -> Balances -> Amount
+lookupBalanceSum participantId paymentBalance balance =
+    (balance |> Balance.lookup participantId) + (paymentBalance |> Balance.lookup participantId)
