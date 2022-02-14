@@ -19,6 +19,7 @@ Note that payment transfers increase the balance of the payer and reduces it for
 -}
 transfer : Participant.Id -> Participant.Id -> Amount -> Balances -> Balances
 transfer payerId receiverId amount =
+    --let _ = Debug.log ("transferring " ++ (String.fromInt amount)) in
     add payerId amount >> add receiverId -amount
 
 

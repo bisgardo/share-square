@@ -50,20 +50,26 @@ autosuggestPayment =
 
 
 findExistingPaymentId : Participant.Id -> Participant.Id -> List Payment -> Maybe ( Payment.Id, Bool )
-findExistingPaymentId payerId receiverId payments =
-    case payments of
-        [] ->
-            Nothing
+findExistingPaymentId payerId receiverId =
+    List.filter (not << .done)
+        >> findExistingPayments payerId receiverId
+        >> List.head
+        >> Maybe.map (Tuple.mapFirst .id)
 
-        existingPayment :: remainingExistingPayments ->
-            if not existingPayment.done && existingPayment.payer == payerId && existingPayment.receiver == receiverId then
-                Just ( existingPayment.id, False )
 
-            else if not existingPayment.done && existingPayment.payer == receiverId && existingPayment.receiver == payerId then
-                Just ( existingPayment.id, True )
+findExistingPayments : Participant.Id -> Participant.Id -> List Payment -> List ( Payment, Bool )
+findExistingPayments payerId receiverId =
+    List.filterMap
+        (\payment ->
+            if payment.payer == payerId && payment.receiver == receiverId then
+                Just ( payment, False )
+
+            else if payment.payer == receiverId && payment.receiver == payerId then
+                Just ( payment, True )
 
             else
-                findExistingPaymentId payerId receiverId remainingExistingPayments
+                Nothing
+        )
 
 
 withExistingPaymentId : List Payment -> Participant.Id -> ( Participant.Id, Amount ) -> SuggestedPayment

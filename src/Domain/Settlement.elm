@@ -38,9 +38,13 @@ compute participants expenseList paymentBalance payments =
                     Dict.empty
 
         suggestedPayments =
+            let
+                _ =
+                    Debug.log "running from compute" 1
+            in
             -- The result value of sumValues only contains keys from the first argument.
             Dict.sumValues balances paymentBalance
-                |> applySettledBy participants
+                |> applySettledBy participants payments
                 |> Suggestion.autosuggestPayments
                 |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId payments payerId))
     in
@@ -51,21 +55,44 @@ compute participants expenseList paymentBalance payments =
     }
 
 
-applySettledBy : List Participant -> Balances -> Balances
-applySettledBy participants balances =
+applySettledBy : List Participant -> List Payment -> Balances -> Balances
+applySettledBy participants payments balances =
     participants
         |> List.foldl
             (\participant ->
+                let
+                    _ =
+                        Debug.log "applying settled by for participant" participant.name
+                in
                 --case participant |> Participant.resolveSettledBy participantIndex participants Set.empty of
                 case participant.settledBy of
                     Nothing ->
                         identity
 
                     Just settledById ->
-                        Balance.transfer
-                            settledById
-                            participant.id
-                            (balances |> Dict.get participant.id |> Maybe.withDefault 0)
+                        let
+                            totalPayment =
+                                payments
+                                    |> Suggestion.findExistingPayments settledById participant.id
+                                    |> List.foldl
+                                        (\( payment, inverse ) result ->
+                                            if inverse then
+                                                result - payment.amount
+
+                                            else
+                                                result + payment.amount
+                                        )
+                                        0
+                                    |> Debug.log "totalPayments"
+                        in
+                        balances
+                            |> Dict.get participant.id
+                            |> Maybe.withDefault 0
+                            |> \x -> x + totalPayment
+                            |> Debug.log "settled amount"
+                            |> Balance.transfer
+                                settledById
+                                participant.id
             )
             balances
 
