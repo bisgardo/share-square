@@ -39,10 +39,6 @@ compute participants expenseList paymentBalance payments =
                     Dict.empty
 
         suggestedPayments =
-            let
-                _ =
-                    Debug.log "running from compute" 1
-            in
             -- The result value of sumValues only contains keys from the first argument.
             Dict.sumValues balances paymentBalance
                 |> applySettledBy participants payments
