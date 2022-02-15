@@ -65,23 +65,3 @@ safeName id participant =
 fallbackName : Id -> String
 fallbackName id =
     "<" ++ (id |> idToString) ++ ">"
-
-
-
---resolveSettledBy : Participants -> Set Id -> Participant -> Maybe Id
---resolveSettledBy participants seen participant =
---    participant.settledBy
---        |> Maybe.andThen
---            (\settledById ->
---                if seen |> Set.member settledById then
---                    Nothing
---
---                else
---                    participants
---                        |> Dict.get settledById
---                        |> Maybe.andThen
---                            (\settledBy ->
---                                resolveSettledBy participants (seen |> Set.insert settledById) settledBy
---                            )
---                        |> Maybe.orElse (Just settledById)
---            )
