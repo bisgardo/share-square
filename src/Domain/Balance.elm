@@ -15,11 +15,10 @@ type alias Balances =
 
 
 {-| Transfer a given amount from the balance of one participant to another.
-Note that payment transfers increase the balance of the payer and reduces it for the receiver.
+Note that a payment transfer increases the balance of the payer and reduces it for the receiver.
 -}
 transfer : Participant.Id -> Participant.Id -> Amount -> Balances -> Balances
 transfer payerId receiverId amount =
-    --let _ = Debug.log ("transferring " ++ (String.fromInt amount)) in
     add payerId amount >> add receiverId -amount
 
 

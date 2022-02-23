@@ -98,7 +98,6 @@ viewBalances config participantModel model =
             (model.computed
                 |> Maybe.unwrap []
                     (\computed ->
-                        let _ = Debug.log "running from viewBalances" 1 in
                         Dict.sumValues computed.balance model.payment.paymentBalance
                             |> Settlement.applySettledBy (participantModel.participants |> Dict.values) model.payment.payments
                             |> Dict.toList
@@ -269,8 +268,6 @@ update config participantModel msg model =
             let
                 ( ( paymentModel, modelChanged ), paymentCmd ) =
                     model.payment |> Payment.update config (model.computed |> Maybe.unwrap Dict.empty .balance) paymentMsg
-                    
-                _ = Debug.log "running from compute" 1
             in
             ( ( { model
                     | payment = paymentModel

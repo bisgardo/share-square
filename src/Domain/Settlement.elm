@@ -7,6 +7,7 @@ import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
 import Domain.Participant as Participant exposing (Participant, Participants)
 import Domain.Payment exposing (Payment)
 import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
+import Maybe.Extra as Maybe
 import Util.Dict as Dict
 
 
@@ -38,10 +39,6 @@ compute participants expenseList paymentBalance payments =
                     Dict.empty
 
         suggestedPayments =
-            let
-                _ =
-                    Debug.log "running from compute" 1
-            in
             -- The result value of sumValues only contains keys from the first argument.
             Dict.sumValues balances paymentBalance
                 |> applySettledBy participants payments
@@ -57,56 +54,58 @@ compute participants expenseList paymentBalance payments =
 
 applySettledBy : List Participant -> List Payment -> Balances -> Balances
 applySettledBy participants payments balances =
+    let
+        -- Might want to represent settlement relation this way in the first place...
+        settledBy =
+            participants
+                |> List.foldl
+                    (\participant ->
+                        case participant.settledBy of
+                            Nothing ->
+                                identity
+
+                            Just settledById ->
+                                Dict.insert participant.id settledById
+                    )
+                    Dict.empty
+
+        -- Balances adjusted for payments between participants that settle for each other.
+        settlementBalances =
+            payments
+                |> List.foldl
+                    (\payment ->
+                        let
+                            payerSettledByReceiver =
+                                settledBy
+                                    |> Dict.get payment.payer
+                                    |> Maybe.unwrap False (\payerSettledById -> payment.receiver == payerSettledById)
+
+                            receiverSettledByPayer =
+                                settledBy
+                                    |> Dict.get payment.receiver
+                                    |> Maybe.unwrap False (\receiverSettledById -> payment.payer == receiverSettledById)
+                        in
+                        if payerSettledByReceiver || receiverSettledByPayer then
+                            Balance.transfer payment.receiver payment.payer payment.amount
+
+                        else
+                            identity
+                    )
+                    balances
+    in
     participants
         |> List.foldl
             (\participant ->
-                let
-                    _ =
-                        Debug.log "applying settled by for participant" participant.name
-                in
                 case participant.settledBy of
                     Nothing ->
                         identity
 
                     Just settledById ->
-                        let
-                            totalPayment =
-                                payments
-                                    |> Suggestion.findExistingPayments settledById participant.id
-                                    |> List.foldl
-                                        (\( payment, inverse ) result ->
-                                            if inverse then
-                                                result - payment.amount
-
-                                            else
-                                                result + payment.amount
-                                        )
-                                        0
-                                    |> Debug.log "totalPayments"
-                        in
-                        balances
+                        settlementBalances
                             |> Dict.get participant.id
                             |> Maybe.withDefault 0
-                            |> \x -> x + totalPayment
-                            |> Debug.log "settled amount"
                             |> Balance.transfer
                                 settledById
                                 participant.id
             )
             balances
-
-
-
---resolveSettledByMapping : Participants-> List Participant -> Dict Participant.Id Participant.Id
---resolveSettledByMapping participantIndex participants =
---    participants
---        |> List.foldl
---            (\participant ->
---                case participant |> Participant.resolveSettledBy participantIndex Set.empty of
---                    Nothing ->
---                        identity
---
---                    Just settledById ->
---                        Dict.insert participant.id settledById
---            )
---            Dict.empty
