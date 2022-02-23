@@ -3,7 +3,6 @@ module Domain.Participant exposing (..)
 import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Json.Encode.Extra as Encode
 
 
 type alias Id =
@@ -35,16 +34,24 @@ decoder =
         (Decode.field "i" Decode.int)
         -- name
         (Decode.field "n" Decode.string)
-        -- settled by
-        (Decode.maybe <| Decode.field "s" Decode.int)
+        -- settled by (silently ignoring any decoding errors)
+        (Decode.field "s" Decode.int |> Decode.maybe)
 
 
 encode : Participant -> Value
 encode participant =
-    [ ( "i", participant.id |> Encode.int )
-    , ( "n", participant.name |> Encode.string )
-    , ( "s", participant.settledBy |> Encode.maybe Encode.int )
-    ]
+    ([ ( "i", participant.id |> Encode.int )
+     , ( "n", participant.name |> Encode.string )
+     ]
+        ++ (case participant.settledBy of
+                Nothing ->
+                    []
+
+                Just settledBy ->
+                    [ ( "s", settledBy |> Encode.int )
+                    ]
+           )
+    )
         |> Encode.object
 
 
@@ -65,23 +72,3 @@ safeName id participant =
 fallbackName : Id -> String
 fallbackName id =
     "<" ++ (id |> idToString) ++ ">"
-
-
-
---resolveSettledBy : Participants -> Set Id -> Participant -> Maybe Id
---resolveSettledBy participants seen participant =
---    participant.settledBy
---        |> Maybe.andThen
---            (\settledById ->
---                if seen |> Set.member settledById then
---                    Nothing
---
---                else
---                    participants
---                        |> Dict.get settledById
---                        |> Maybe.andThen
---                            (\settledBy ->
---                                resolveSettledBy participants (seen |> Set.insert settledById) settledBy
---                            )
---                        |> Maybe.orElse (Just settledById)
---            )

@@ -64,7 +64,6 @@ applySettledBy participants payments balances =
                     _ =
                         Debug.log "applying settled by for participant" participant.name
                 in
-                --case participant |> Participant.resolveSettledBy participantIndex participants Set.empty of
                 case participant.settledBy of
                     Nothing ->
                         identity
