@@ -146,12 +146,24 @@ viewBalances config participantModel model =
                                                                     |> Amount.toStringSigned "+" config.amount
                                                                 )
 
-                                                        Just settlerId ->
+                                                        Just settledById ->
                                                             let
                                                                 settlerName =
-                                                                    participantModel.participants |> Dict.get settlerId |> Participant.safeName settlerId
+                                                                    participantModel.participants
+                                                                        |> Dict.get settledById
+                                                                        |> Participant.safeName settledById
                                                             in
-                                                            Html.i [] [ text <| "Settled by " ++ settlerName ++ " (" ++ (entry.totalBalance |> Amount.toStringSigned "+" config.amount) ++ ")" ]
+                                                            Html.i []
+                                                                [ text <|
+                                                                    "Settled by "
+                                                                        ++ settlerName
+                                                                        ++ (if entry.totalBalance == 0 then
+                                                                                ""
+
+                                                                            else
+                                                                                " (" ++ (entry.totalBalance |> Amount.toStringSigned "+" config.amount) ++ " not transferred)"
+                                                                           )
+                                                                ]
                                             ]
                                         , Html.td []
                                             (computed.suggestedPayments
