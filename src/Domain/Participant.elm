@@ -3,6 +3,7 @@ module Domain.Participant exposing (..)
 import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
+import Maybe.Extra as Maybe
 
 
 type alias Id =
@@ -40,18 +41,15 @@ decoder =
 
 encode : Participant -> Value
 encode participant =
-    ([ ( "i", participant.id |> Encode.int )
-     , ( "n", participant.name |> Encode.string )
-     ]
-        ++ (case participant.settledBy of
-                Nothing ->
-                    []
-
-                Just settledBy ->
-                    [ ( "s", settledBy |> Encode.int )
-                    ]
-           )
-    )
+    [ Just ( "i", participant.id |> Encode.int )
+    , Just ( "n", participant.name |> Encode.string )
+    , participant.settledBy
+        |> Maybe.map
+            (\settledBy ->
+                ( "s", settledBy |> Encode.int )
+            )
+    ]
+        |> Maybe.values
         |> Encode.object
 
 
