@@ -138,11 +138,11 @@ storageValuesDecoder =
     Decode.map4
         StorageValues
         -- participants
-        (Decode.field "p" <| Decode.nullableList Participant.decoder)
+        (Decode.field "p" <| Decode.list Participant.decoder)
         -- expenses
-        (Decode.field "e" <| Decode.nullableList Expense.decoder)
+        (Decode.field "e" <| Decode.list Expense.decoder)
         -- payments
-        (Decode.field "y" <| Decode.nullableList Payment.decoder)
+        (Decode.field "y" <| Decode.list Payment.decoder)
         -- config
         (Decode.field "c" <| storageConfigDecoder)
 

@@ -6,7 +6,7 @@ import Domain.Balance as Balance exposing (Balances)
 import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
 import Domain.Participant as Participant exposing (Participant, Participants)
 import Domain.Payment exposing (Payment)
-import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
+import Domain.Suggestion as Suggestion exposing (SuggestedPayments)
 import Util.Dict as Dict
 
 
@@ -14,7 +14,7 @@ type alias Computed =
     { expenses : Expenses
     , debts : Debt
     , balance : Balances
-    , suggestedPayments : Dict Participant.Id (List SuggestedPayment) -- TODO extract type?
+    , suggestedPayments : SuggestedPayments
     }
 
 

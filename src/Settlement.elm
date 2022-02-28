@@ -270,7 +270,10 @@ update config msg model =
                                             | suggestedPayments =
                                                 Dict.sumValues computed.balance paymentModel.paymentBalance
                                                     |> Suggestion.autosuggestPayments
-                                                    |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId))
+                                                    |> Dict.map
+                                                        (\payerId ->
+                                                            List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId)
+                                                        )
                                         }
                                     )
 
