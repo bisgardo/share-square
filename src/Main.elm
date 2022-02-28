@@ -420,7 +420,7 @@ viewContent model =
                     , data "bs-target" ("#" ++ tabIds.settlement)
                     , Html.Attributes.class "nav-link"
                     , Settlement.Enable
-                        model.expense.participant.participants
+                        (model.expense.participant.participants |> Dict.values)
                         model.expense.expenses
                         |> ComputationMsg
                         |> Html.Events.onClick

@@ -48,7 +48,7 @@ import_ payments model =
 
 type Msg
     = Disable
-    | Enable Participants (List Expense)
+    | Enable (List Participant) (List Expense)
     | PaymentMsg Payment.Msg
 
 

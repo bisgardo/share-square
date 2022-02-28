@@ -27,7 +27,7 @@ type alias Model =
 
 type alias CreateModel =
     { name : Validated Field
-    , participantNamesLower : List String
+    , participantNamesLower : List String -- used for case-insensitive duplication check
     }
 
 

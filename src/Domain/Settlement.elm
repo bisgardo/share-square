@@ -18,7 +18,7 @@ type alias Computed =
     }
 
 
-compute : Participants -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
+compute : List Participant -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
 compute participants expenseList paymentBalance payments =
     let
         expenses =
@@ -29,7 +29,6 @@ compute participants expenseList paymentBalance payments =
 
         balances =
             participants
-                |> Dict.values
                 |> List.map .id
                 |> List.foldl
                     (\participantId ->
