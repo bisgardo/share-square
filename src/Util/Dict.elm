@@ -18,13 +18,13 @@ parseKeys parse =
 
 
 sumValues : Dict comparable number -> Dict comparable number -> Dict comparable number
-sumValues mostKeys fewestKeys =
+sumValues fewestKeys mostKeys =
     Dict.foldl
         (\key value ->
             Dict.update key (Maybe.withDefault 0 >> (+) value >> Just)
         )
-        fewestKeys
         mostKeys
+        fewestKeys
 
 
 valueSum : comparable -> Dict comparable (Dict b number) -> number
