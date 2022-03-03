@@ -18,6 +18,7 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Participant
 import Task
+import Util.Dict as Dict
 import Util.Number as Number
 import Util.Update as Update
 
@@ -231,8 +232,8 @@ viewCreateOpen participantModel =
         createModalId
         "Add payment"
         [ Html.Attributes.class "w-100"
-        , Html.Attributes.disabled (participantModel.order |> List.isEmpty)
-        , Html.Events.onClick (participantModel.order |> LoadCreate)
+        , Html.Attributes.disabled (participantModel.participants |> Dict.isEmpty)
+        , Html.Events.onClick (LoadCreate participantModel.order)
         ]
 
 
@@ -405,17 +406,17 @@ subscriptions _ =
 update : Config -> Balances -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
 update config balances msg model =
     case msg of
-        LoadCreate participants ->
+        LoadCreate participantIds ->
             let
-                ( firstParticipantFallback, secondParticipantFallback ) =
-                    case participants of
+                ( firstParticipantFallbackId, secondParticipantFallbackId ) =
+                    case participantIds of
                         firstParticipant :: secondParticipant :: _ ->
                             ( Just firstParticipant, Just secondParticipant )
 
                         _ ->
                             ( Nothing, Nothing )
 
-                ( firstNegativeBalanceParticipant, firstPositiveBalanceParticipant ) =
+                ( firstNegativeBalanceParticipantId, firstPositiveBalanceParticipantId ) =
                     balances
                         |> Dict.foldl
                             (\participantId participantBalance ( negativeResult, positiveResult ) ->
@@ -443,7 +444,7 @@ update config balances msg model =
             in
             ( ( { model
                     | create =
-                        participants
+                        participantIds
                             |> List.head
                             |> Maybe.map
                                 (\firstParticipant ->
@@ -455,14 +456,14 @@ update config balances msg model =
             , Cmd.none
             )
                 |> Update.chains (Update.withPairModel (update config balances) (||))
-                    ((case firstNegativeBalanceParticipant |> Maybe.orElse firstParticipantFallback of
+                    ((case firstNegativeBalanceParticipantId |> Maybe.orElse firstParticipantFallbackId of
                         Nothing ->
                             []
 
                         Just payer ->
                             [ CreateEditPayer (payer |> Participant.idToString) ]
                      )
-                        ++ (case firstPositiveBalanceParticipant |> Maybe.orElse secondParticipantFallback of
+                        ++ (case firstPositiveBalanceParticipantId |> Maybe.orElse secondParticipantFallbackId of
                                 Nothing ->
                                     []
 

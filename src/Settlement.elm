@@ -48,7 +48,7 @@ import_ payments model =
 
 type Msg
     = Disable
-    | Enable Participants (List Expense)
+    | Enable (List Participant) (List Expense)
     | PaymentMsg Payment.Msg
 
 
@@ -98,7 +98,8 @@ viewBalances config participantModel model =
             (model.computed
                 |> Maybe.unwrap []
                     (\computed ->
-                        Dict.sumValues computed.balance model.payment.paymentBalance
+                        computed.balance
+                            |> Dict.sumValues model.payment.paymentBalance
                             |> Dict.toList
                             |> List.map
                                 (\( participantId, totalBalance ) ->
@@ -268,9 +269,13 @@ update config msg model =
                                     (\computed ->
                                         { computed
                                             | suggestedPayments =
-                                                Dict.sumValues computed.balance paymentModel.paymentBalance
+                                                computed.balance
+                                                    |> Dict.sumValues paymentModel.paymentBalance
                                                     |> Suggestion.autosuggestPayments
-                                                    |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId))
+                                                    |> Dict.map
+                                                        (\payerId ->
+                                                            List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId)
+                                                        )
                                         }
                                     )
 

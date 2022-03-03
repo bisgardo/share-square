@@ -62,7 +62,7 @@ type alias CreateModel =
     { payerId : String
     , amount : Validated Field
     , description : Validated Field
-    , receivers : Dict String Float -- TODO should just be Set
+    , receivers : Dict String Float
     , editId : Maybe Expense.Id
     }
 
@@ -178,7 +178,7 @@ view config model =
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Description" ]
                 , Html.th
                     [ Html.Attributes.scope "col"
-                    , Html.Attributes.colspan (model.participant.order |> List.length |> max 1)
+                    , Html.Attributes.colspan (model.participant.participants |> Dict.size |> max 1)
                     ]
                     [ Html.text "Participants" ]
                 , Html.td [] []
@@ -251,7 +251,7 @@ view config model =
                                         |> List.map
                                             (\participantId ->
                                                 Html.td []
-                                                    (if Dict.member participantId expense.receivers then
+                                                    (if expense.receivers |> Dict.member participantId then
                                                         [ Html.text "✓" ]
 
                                                      else
@@ -303,7 +303,7 @@ viewCreateOpen : Model -> Html Msg
 viewCreateOpen model =
     let
         disabled =
-            model.participant.order |> List.isEmpty
+            model.participant.participants |> Dict.isEmpty
 
         html =
             openModalButton

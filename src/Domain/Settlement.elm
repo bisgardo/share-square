@@ -6,7 +6,7 @@ import Domain.Balance as Balance exposing (Balances)
 import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
 import Domain.Participant as Participant exposing (Participant, Participants)
 import Domain.Payment exposing (Payment)
-import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
+import Domain.Suggestion as Suggestion exposing (SuggestedPayments)
 import Util.Dict as Dict
 
 
@@ -14,11 +14,11 @@ type alias Computed =
     { expenses : Expenses
     , debts : Debt
     , balance : Balances
-    , suggestedPayments : Dict Participant.Id (List SuggestedPayment) -- TODO extract type?
+    , suggestedPayments : SuggestedPayments
     }
 
 
-compute : Participants -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
+compute : List Participant -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
 compute participants expenseList paymentBalance payments =
     let
         expenses =
@@ -29,7 +29,6 @@ compute participants expenseList paymentBalance payments =
 
         balances =
             participants
-                |> Dict.values
                 |> List.map .id
                 |> List.foldl
                     (\participantId ->
@@ -39,8 +38,8 @@ compute participants expenseList paymentBalance payments =
                     Dict.empty
 
         suggestedPayments =
-            -- The result value of sumValues only contains keys from the first argument.
-            Dict.sumValues balances paymentBalance
+            balances
+                |> Dict.sumValues paymentBalance
                 |> Suggestion.autosuggestPayments
                 |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId payments payerId))
     in

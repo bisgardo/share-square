@@ -24,7 +24,6 @@ import Url exposing (Url)
 import Url.Builder
 import Url.Parser exposing ((<?>), Parser)
 import Url.Parser.Query
-import Util.JsonDecode as Decode
 import Util.Update as Update
 
 
@@ -138,11 +137,11 @@ storageValuesDecoder =
     Decode.map4
         StorageValues
         -- participants
-        (Decode.field "p" <| Decode.nullableList Participant.decoder)
+        (Decode.field "p" <| Decode.list Participant.decoder)
         -- expenses
-        (Decode.field "e" <| Decode.nullableList Expense.decoder)
+        (Decode.field "e" <| Decode.list Expense.decoder)
         -- payments
-        (Decode.field "y" <| Decode.nullableList Payment.decoder)
+        (Decode.field "y" <| Decode.list Payment.decoder)
         -- config
         (Decode.field "c" <| storageConfigDecoder)
 
@@ -420,7 +419,7 @@ viewContent model =
                     , data "bs-target" ("#" ++ tabIds.settlement)
                     , Html.Attributes.class "nav-link"
                     , Settlement.Enable
-                        model.expense.participant.participants
+                        (model.expense.participant.participants |> Dict.values)
                         model.expense.expenses
                         |> ComputationMsg
                         |> Html.Events.onClick
