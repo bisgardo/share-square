@@ -18,6 +18,7 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Participant
 import Task
+import Util.Dict as Dict
 import Util.Number as Number
 import Util.Update as Update
 
@@ -743,7 +744,6 @@ type alias PaymentSuggestion =
 suggestPaymentAmounts : String -> String -> Balances -> Balances -> PaymentSuggestion
 suggestPaymentAmounts payer receiver paymentBalance balance =
     -- TODO Return error if ID parsing fails.
-    -- TODO Should take merged balance.
     let
         payerId =
             payer |> Participant.idFromString |> Maybe.withDefault 0

@@ -85,3 +85,8 @@ decoder =
 encode : Amount -> Encode.Value
 encode =
     Encode.int
+
+
+weightByPart : Float -> Float -> Amount -> Amount
+weightByPart part weightSum amount =
+    part * (amount |> toFloat) / weightSum |> round

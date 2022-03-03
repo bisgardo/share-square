@@ -38,8 +38,8 @@ compute participants expenseList paymentBalance payments =
                     Dict.empty
 
         suggestedPayments =
-            -- The result value of sumValues only contains keys from the first argument.
-            Dict.sumValues balances paymentBalance
+            balances
+                |> Dict.sumValues paymentBalance
                 |> Suggestion.autosuggestPayments
                 |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId payments payerId))
     in
