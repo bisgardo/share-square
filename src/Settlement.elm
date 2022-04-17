@@ -100,7 +100,9 @@ viewBalances config participantModel model =
                     (\computed ->
                         computed.balance
                             |> Dict.sumValues model.payment.paymentBalance
-                            |> Settlement.applySettledBy (participantModel.participants |> Dict.values) model.payment.payments
+                            |> Settlement.applySettledBy
+                                (participantModel.participants |> Dict.values)
+                                model.payment.payments
                             |> Dict.toList
                             |> List.map
                                 (\( participantId, totalBalance ) ->
@@ -280,7 +282,11 @@ update config participantModel msg model =
         PaymentMsg paymentMsg ->
             let
                 ( ( paymentModel, modelChanged ), paymentCmd ) =
-                    model.payment |> Payment.update config (model.computed |> Maybe.unwrap Dict.empty .balance) paymentMsg
+                    model.payment
+                        |> Payment.update config
+                            participantModel
+                            (model.computed |> Maybe.unwrap Dict.empty .balance)
+                            paymentMsg
             in
             ( ( { model
                     | payment = paymentModel
@@ -293,11 +299,17 @@ update config participantModel msg model =
                                             | suggestedPayments =
                                                 computed.balance
                                                     |> Dict.sumValues paymentModel.paymentBalance
-                                                    |> Settlement.applySettledBy (participantModel.participants |> Dict.values) paymentModel.payments
+                                                    |> Settlement.applySettledBy
+                                                        (participantModel.participants |> Dict.values)
+                                                        paymentModel.payments
                                                     |> Suggestion.autosuggestPayments
                                                     |> Dict.map
                                                         (\payerId ->
-                                                            List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId)
+                                                            List.map
+                                                                (Suggestion.withExistingPaymentId
+                                                                    paymentModel.payments
+                                                                    payerId
+                                                                )
                                                         )
                                         }
                                     )

@@ -7,6 +7,7 @@ import Domain.Amount as Amount exposing (Amount)
 import Domain.Balance as Balance exposing (Balances)
 import Domain.Participant as Participant
 import Domain.Payment as Payment exposing (Payment)
+import Domain.Settlement as Settlement
 import Domain.Suggestion as Suggestion
 import Expense
 import Html exposing (Html, div, text)
@@ -403,8 +404,8 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : Config -> Balances -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update config balances msg model =
+update : Config -> Participant.Model -> Balances -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config participantModel balances msg model =
     case msg of
         LoadCreate participantIds ->
             let
@@ -455,7 +456,8 @@ update config balances msg model =
               )
             , Cmd.none
             )
-                |> Update.chains (Update.withPairModel (update config balances) (||))
+                |> Update.chains
+                    (Update.withPairModel (update config participantModel balances) (||))
                     ((case firstNegativeBalanceParticipantId |> Maybe.orElse firstParticipantFallbackId of
                         Nothing ->
                             []
@@ -476,7 +478,6 @@ update config balances msg model =
             ( ( model, False ), closeModal createModalId )
 
         CreateEditPayer payerId ->
-            -- TODO Consolidate with next case below.
             ( ( { model
                     | create =
                         model.create
@@ -487,10 +488,13 @@ update config balances msg model =
                                         , suggestedPayment =
                                             Just
                                                 (balances
+                                                    |> Dict.sumValues model.paymentBalance
+                                                    |> Settlement.applySettledBy
+                                                        (participantModel.participants |> Dict.values)
+                                                        model.payments
                                                     |> suggestPaymentAmounts
                                                         payerId
                                                         createModel.receiverId
-                                                        model.paymentBalance
                                                 )
                                     }
                                 )
@@ -511,10 +515,13 @@ update config balances msg model =
                                         , suggestedPayment =
                                             Just
                                                 (balances
+                                                    |> Dict.sumValues model.paymentBalance
+                                                    |> Settlement.applySettledBy
+                                                        (participantModel.participants |> Dict.values)
+                                                        model.payments
                                                     |> suggestPaymentAmounts
                                                         createModel.payerId
                                                         receiverId
-                                                        model.paymentBalance
                                                 )
                                     }
                                 )
@@ -558,7 +565,7 @@ update config balances msg model =
                     createModel.amount.key |> Dom.focus |> Task.attempt DomMsg
             )
                 |> Update.chain
-                    (update config balances)
+                    (update config participantModel balances)
                     (amount |> Amount.toString config.amount |> CreateEditAmount)
 
         CreateSetDone done ->
@@ -742,10 +749,9 @@ type alias PaymentSuggestion =
     }
 
 
-suggestPaymentAmounts : String -> String -> Balances -> Balances -> PaymentSuggestion
-suggestPaymentAmounts payer receiver paymentBalance balance =
+suggestPaymentAmounts : String -> String -> Balances -> PaymentSuggestion
+suggestPaymentAmounts payer receiver balance =
     -- TODO Return error if ID parsing fails.
-    -- TODO Should take merged balance which also includes amounts transferred by "settled by" relations.
     let
         payerId =
             payer |> Participant.idFromString |> Maybe.withDefault 0
@@ -754,18 +760,13 @@ suggestPaymentAmounts payer receiver paymentBalance balance =
             receiver |> Participant.idFromString |> Maybe.withDefault 0
 
         payerBalance =
-            lookupBalanceSum payerId paymentBalance balance
+            balance |> Balance.lookup payerId
 
         receiverBalance =
-            lookupBalanceSum receiverId paymentBalance balance
+            balance |> Balance.lookup receiverId
     in
     { payerId = payerId
     , receiverId = receiverId
     , payerOwingAmount = -payerBalance
     , receiverOwedAmount = receiverBalance
     }
-
-
-lookupBalanceSum : Participant.Id -> Balances -> Balances -> Amount
-lookupBalanceSum participantId paymentBalance balance =
-    (balance |> Balance.lookup participantId) + (paymentBalance |> Balance.lookup participantId)
