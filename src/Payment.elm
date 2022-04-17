@@ -18,6 +18,7 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Participant
 import Task
+import Util.Dict as Dict
 import Util.Number as Number
 import Util.Update as Update
 

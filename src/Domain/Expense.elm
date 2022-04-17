@@ -91,7 +91,7 @@ type alias Debt =
 expensesFromList : List Expense -> Expenses
 expensesFromList =
     List.foldl
-        (\expense outerResult ->
+        (\expense ->
             let
                 weightSum =
                     expense.receivers
@@ -101,20 +101,21 @@ expensesFromList =
                 weightedDebt =
                     expense.receivers
                         |> Dict.foldl
-                            (\receiver part innerResult ->
+                            (\receiver part ->
                                 if receiver == expense.payer then
                                     -- Ignore debt to self.
-                                    innerResult
+                                    identity
 
                                 else
-                                    innerResult
-                                        |> Dict.insert receiver (part * (expense.amount |> toFloat) / weightSum |> round)
+                                    expense.amount
+                                        |> Amount.weightByPart part weightSum
+                                        |> Dict.insert receiver
                             )
                             Dict.empty
             in
             if weightedDebt |> Dict.isEmpty then
                 -- Ignore entry if the payer is the only receiver of the expense.
-                outerResult
+                identity
 
             else
                 Dict.update expense.payer
@@ -122,7 +123,6 @@ expensesFromList =
                         >> Dict.sumValues weightedDebt
                         >> Just
                     )
-                    outerResult
         )
         Dict.empty
 

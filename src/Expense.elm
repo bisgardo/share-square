@@ -62,7 +62,7 @@ type alias CreateModel =
     { payerId : String
     , amount : Validated Field
     , description : Validated Field
-    , receivers : Dict String Float -- TODO should just be Set
+    , receivers : Dict String Float
     , editId : Maybe Expense.Id
     }
 

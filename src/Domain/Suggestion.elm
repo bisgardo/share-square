@@ -15,6 +15,10 @@ type alias SuggestedPayment =
     ( Participant.Id, Amount, Maybe ( Payment.Id, Bool ) )
 
 
+type alias SuggestedPayments =
+    Dict Participant.Id (List SuggestedPayment)
+
+
 autosuggestPayments : Balances -> Dict Participant.Id (List ( Participant.Id, Amount ))
 autosuggestPayments totalBalances =
     case totalBalances |> autosuggestPayment of

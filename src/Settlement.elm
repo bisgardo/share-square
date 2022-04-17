@@ -98,7 +98,8 @@ viewBalances config participantModel model =
             (model.computed
                 |> Maybe.unwrap []
                     (\computed ->
-                        Dict.sumValues computed.balance model.payment.paymentBalance
+                        computed.balance
+                            |> Dict.sumValues model.payment.paymentBalance
                             |> Settlement.applySettledBy (participantModel.participants |> Dict.values) model.payment.payments
                             |> Dict.toList
                             |> List.map
@@ -290,10 +291,14 @@ update config participantModel msg model =
                                     (\computed ->
                                         { computed
                                             | suggestedPayments =
-                                                Dict.sumValues computed.balance paymentModel.paymentBalance
+                                                computed.balance
+                                                    |> Dict.sumValues paymentModel.paymentBalance
                                                     |> Settlement.applySettledBy (participantModel.participants |> Dict.values) paymentModel.payments
                                                     |> Suggestion.autosuggestPayments
-                                                    |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId))
+                                                    |> Dict.map
+                                                        (\payerId ->
+                                                            List.map (Suggestion.withExistingPaymentId paymentModel.payments payerId)
+                                                        )
                                         }
                                     )
 
