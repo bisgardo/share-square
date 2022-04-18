@@ -23,14 +23,13 @@ idToString =
 type alias Participant =
     { id : Id
     , name : String
-    , settledBy : Maybe Id
     }
 
 
-decoder : Decoder Participant
+decoder : Decoder ( Participant, Maybe Id )
 decoder =
     Decode.map3
-        Participant
+        (\id name settledBy -> ( Participant id name, settledBy ))
         -- ID
         (Decode.field "i" Decode.int)
         -- name
@@ -39,15 +38,12 @@ decoder =
         (Decode.field "s" Decode.int |> Decode.maybe)
 
 
-encode : Participant -> Value
-encode participant =
+encode : ( Participant, Maybe Id ) -> Value
+encode ( participant, settledBy ) =
     [ Just ( "i", participant.id |> Encode.int )
     , Just ( "n", participant.name |> Encode.string )
-    , participant.settledBy
-        |> Maybe.map
-            (\settledBy ->
-                ( "s", settledBy |> Encode.int )
-            )
+    , settledBy
+        |> Maybe.map (\s -> ( "s", s |> Encode.int ))
     ]
         |> Maybe.values
         |> Encode.object

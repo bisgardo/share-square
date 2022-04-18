@@ -7,7 +7,6 @@ import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
 import Domain.Participant as Participant exposing (Participant, Participants)
 import Domain.Payment as Payment exposing (Payment)
 import Domain.Settlement as Settlement
-import Domain.Suggestion as Suggestion exposing (SuggestedPayment)
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events
@@ -22,6 +21,7 @@ import Util.Dict as Dict
 type alias Model =
     { computed : Maybe Settlement.Computed
     , payment : Payment.Model
+    , settledBy : Settlement.SettledBy
     }
 
 
@@ -33,16 +33,18 @@ init =
     in
     ( { computed = Nothing
       , payment = paymentModel
+      , settledBy = Dict.empty
       }
     , paymentCmd |> Cmd.map PaymentMsg
     )
 
 
-import_ : List Payment -> Model -> Model
-import_ payments model =
+import_ : List Payment -> Settlement.SettledBy -> Model -> Model
+import_ payments settledBy model =
     { model
         | computed = Nothing
         , payment = model.payment |> Payment.import_ payments
+        , settledBy = settledBy
     }
 
 
@@ -50,6 +52,7 @@ type Msg
     = Disable
     | Enable (List Participant) (List Expense)
     | PaymentMsg Payment.Msg
+    | SetSettledBy Participant.Id Participant.Id
 
 
 view : Config -> Participant.Model -> Model -> Html Msg
@@ -91,6 +94,7 @@ viewBalances config participantModel model =
                         ]
                         [ Html.text "apply all" ]
                     ]
+                , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Settled by" ]
                 ]
             ]
         , Html.Keyed.node "tbody"
@@ -102,6 +106,7 @@ viewBalances config participantModel model =
                             |> Dict.sumValues model.payment.paymentBalance
                             |> Settlement.applySettledBy
                                 (participantModel.participants |> Dict.values)
+                                model.settledBy
                                 model.payment.payments
                             |> Dict.toList
                             |> List.map
@@ -142,7 +147,7 @@ viewBalances config participantModel model =
                                                     text <| "N/A"
 
                                                 Just participant ->
-                                                    case participant.settledBy of
+                                                    case model.settledBy |> Dict.get participant.id of
                                                         Nothing ->
                                                             text
                                                                 (entry.totalBalance
@@ -218,6 +223,38 @@ viewBalances config participantModel model =
                                                             )
                                                     )
                                             )
+                                        , Html.td [] <|
+                                            [ Html.select
+                                                [ Html.Attributes.id <| "settled-by_" ++ Participant.idToString entry.id
+                                                , Html.Attributes.class "form-select"
+                                                , Html.Events.onInput
+                                                    (\value ->
+                                                        SetSettledBy entry.id (value |> Participant.idFromString |> Maybe.withDefault 0)
+                                                     -- TODO translate to Nothing when equal to self
+                                                    )
+                                                ]
+                                                (let
+                                                    selected =
+                                                        case model.settledBy |> Dict.get entry.id of
+                                                            Nothing ->
+                                                                entry.id |> Participant.idToString
+
+                                                            Just settledByParticipant ->
+                                                                settledByParticipant |> Participant.idToString
+                                                 in
+                                                 participantModel.participants
+                                                    |> Dict.values
+                                                    |> List.sortBy .name
+                                                    |> List.map
+                                                        (\participant ->
+                                                            Layout.optionInput
+                                                                selected
+                                                                { key = participant.id |> Participant.idToString
+                                                                , value = participant.name
+                                                                }
+                                                        )
+                                                )
+                                            ]
                                         ]
                                     )
                                 )
@@ -273,6 +310,7 @@ update config participantModel msg model =
                                     expenseList
                                     model.payment.paymentBalance
                                     model.payment.payments
+                                    model.settledBy
                     }
                   , False
                   )
@@ -285,6 +323,7 @@ update config participantModel msg model =
                     model.payment
                         |> Payment.update config
                             participantModel
+                            model.settledBy
                             (model.computed |> Maybe.unwrap Dict.empty .balance)
                             paymentMsg
             in
@@ -297,20 +336,12 @@ update config participantModel msg model =
                                     (\computed ->
                                         { computed
                                             | suggestedPayments =
-                                                computed.balance
-                                                    |> Dict.sumValues paymentModel.paymentBalance
-                                                    |> Settlement.applySettledBy
-                                                        (participantModel.participants |> Dict.values)
-                                                        paymentModel.payments
-                                                    |> Suggestion.autosuggestPayments
-                                                    |> Dict.map
-                                                        (\payerId ->
-                                                            List.map
-                                                                (Suggestion.withExistingPaymentId
-                                                                    paymentModel.payments
-                                                                    payerId
-                                                                )
-                                                        )
+                                                Settlement.computeSuggestedPayments
+                                                    computed.balance
+                                                    paymentModel.paymentBalance
+                                                    (participantModel.participants |> Dict.values)
+                                                    paymentModel.payments
+                                                    model.settledBy
                                         }
                                     )
 
@@ -320,4 +351,39 @@ update config participantModel msg model =
               , modelChanged
               )
             , paymentCmd |> Cmd.map PaymentMsg
+            )
+
+        SetSettledBy participantId settledByParticipantId ->
+            let
+                settledBy =
+                    model.settledBy
+                        |> Dict.update participantId
+                            (\_ ->
+                                if settledByParticipantId == participantId then
+                                    Nothing
+
+                                else
+                                    Just settledByParticipantId
+                            )
+            in
+            ( ( { model
+                    | settledBy = settledBy
+                    , computed =
+                        model.computed
+                            |> Maybe.map
+                                (\computed ->
+                                    { computed
+                                        | suggestedPayments =
+                                            Settlement.computeSuggestedPayments
+                                                computed.balance
+                                                model.payment.paymentBalance
+                                                (participantModel.participants |> Dict.values)
+                                                model.payment.payments
+                                                settledBy
+                                    }
+                                )
+                }
+              , True
+              )
+            , Cmd.none
             )

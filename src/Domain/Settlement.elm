@@ -11,6 +11,10 @@ import Maybe.Extra as Maybe
 import Util.Dict as Dict
 
 
+type alias SettledBy =
+    Dict Participant.Id Participant.Id
+
+
 type alias Computed =
     { expenses : Expenses
     , debts : Debt
@@ -19,8 +23,8 @@ type alias Computed =
     }
 
 
-compute : List Participant -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
-compute participants expenseList paymentBalance payments =
+compute : List Participant -> List Expense -> Balances -> List Payment -> SettledBy -> Computed
+compute participants expenseList paymentBalance payments settledBy =
     let
         expenses =
             Expense.expensesFromList expenseList
@@ -37,38 +41,26 @@ compute participants expenseList paymentBalance payments =
                             |> Dict.insert participantId
                     )
                     Dict.empty
-
-        suggestedPayments =
-            balances
-                |> Dict.sumValues paymentBalance
-                |> applySettledBy participants payments
-                |> Suggestion.autosuggestPayments
-                |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId payments payerId))
     in
     { expenses = expenses
     , debts = debts
     , balance = balances
-    , suggestedPayments = suggestedPayments
+    , suggestedPayments = computeSuggestedPayments balances paymentBalance participants payments settledBy
     }
 
 
-applySettledBy : List Participant -> List Payment -> Balances -> Balances
-applySettledBy participants payments balances =
+computeSuggestedPayments : Balances -> Balances -> List Participant -> List Payment -> SettledBy -> SuggestedPayments
+computeSuggestedPayments balances paymentBalance participants payments settledBy =
+    balances
+        |> Dict.sumValues paymentBalance
+        |> applySettledBy participants settledBy payments
+        |> Suggestion.autosuggestPayments
+        |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId payments payerId))
+
+
+applySettledBy : List Participant -> SettledBy -> List Payment -> Balances -> Balances
+applySettledBy participants settledBy payments balances =
     let
-        -- Might want to represent settlement relation this way in the first place...
-        settledBy =
-            participants
-                |> List.foldl
-                    (\participant ->
-                        case participant.settledBy of
-                            Nothing ->
-                                identity
-
-                            Just settledById ->
-                                Dict.insert participant.id settledById
-                    )
-                    Dict.empty
-
         -- Balances adjusted for payments between participants that settle for each other.
         settlementBalances =
             payments
@@ -96,7 +88,7 @@ applySettledBy participants payments balances =
     participants
         |> List.foldl
             (\participant ->
-                case participant.settledBy of
+                case settledBy |> Dict.get participant.id of
                     Nothing ->
                         identity
 

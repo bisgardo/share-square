@@ -269,7 +269,12 @@ viewAdd config participantModel model =
 
         participantsFields =
             participantModel.order
-                |> List.map (\participantId -> participantModel.participants |> Dict.get participantId |> Maybe.map Participant.toField)
+                |> List.map
+                    (\participantId ->
+                        participantModel.participants
+                            |> Dict.get participantId
+                            |> Maybe.map Participant.toField
+                    )
                 |> Maybe.values
 
         ( payerFeedback, receiverFeedback, suggestedPayments ) =
@@ -284,14 +289,20 @@ viewAdd config participantModel model =
                     Just suggestedPayment ->
                         ( if suggestedPayment.payerOwingAmount <= 0 then
                             Info <|
-                                (participantModel.participants |> Dict.get suggestedPayment.payerId |> Participant.safeName suggestedPayment.payerId)
+                                (participantModel.participants
+                                    |> Dict.get suggestedPayment.payerId
+                                    |> Participant.safeName suggestedPayment.payerId
+                                )
                                     ++ " doesn't owe anything."
 
                           else
                             None
                         , if suggestedPayment.receiverOwedAmount <= 0 then
                             Info <|
-                                (participantModel.participants |> Dict.get suggestedPayment.receiverId |> Participant.safeName suggestedPayment.receiverId)
+                                (participantModel.participants
+                                    |> Dict.get suggestedPayment.receiverId
+                                    |> Participant.safeName suggestedPayment.receiverId
+                                )
                                     ++ " isn't owed anything."
 
                           else
@@ -308,12 +319,14 @@ viewAdd config participantModel model =
                             |> List.filter (.amount >> Number.isPositive)
                         )
     in
-    [ optionsInput "new-payments-payer"
+    [ optionsInput
+        "new-payments-payer"
         "Payer"
         { fields = participantsFields, feedback = payerFeedback }
         model.payerId
         CreateEditPayer
-    , optionsInput "new-payments-receiver"
+    , optionsInput
+        "new-payments-receiver"
         "Receiver"
         { fields = participantsFields, feedback = receiverFeedback }
         model.receiverId
@@ -404,8 +417,8 @@ subscriptions _ =
     modalClosed ModalClosed |> Sub.map LayoutMsg
 
 
-update : Config -> Participant.Model -> Balances -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
-update config participantModel balances msg model =
+update : Config -> Participant.Model -> Settlement.SettledBy -> Balances -> Msg -> Model -> ( ( Model, Bool ), Cmd Msg )
+update config participantModel settledBy balances msg model =
     case msg of
         LoadCreate participantIds ->
             let
@@ -457,7 +470,7 @@ update config participantModel balances msg model =
             , Cmd.none
             )
                 |> Update.chains
-                    (Update.withPairModel (update config participantModel balances) (||))
+                    (Update.withPairModel (update config participantModel settledBy balances) (||))
                     ((case firstNegativeBalanceParticipantId |> Maybe.orElse firstParticipantFallbackId of
                         Nothing ->
                             []
@@ -491,6 +504,7 @@ update config participantModel balances msg model =
                                                     |> Dict.sumValues model.paymentBalance
                                                     |> Settlement.applySettledBy
                                                         (participantModel.participants |> Dict.values)
+                                                        settledBy
                                                         model.payments
                                                     |> suggestPaymentAmounts
                                                         payerId
@@ -518,6 +532,7 @@ update config participantModel balances msg model =
                                                     |> Dict.sumValues model.paymentBalance
                                                     |> Settlement.applySettledBy
                                                         (participantModel.participants |> Dict.values)
+                                                        settledBy
                                                         model.payments
                                                     |> suggestPaymentAmounts
                                                         createModel.payerId
@@ -565,7 +580,7 @@ update config participantModel balances msg model =
                     createModel.amount.key |> Dom.focus |> Task.attempt DomMsg
             )
                 |> Update.chain
-                    (update config participantModel balances)
+                    (update config participantModel settledBy balances)
                     (amount |> Amount.toString config.amount |> CreateEditAmount)
 
         CreateSetDone done ->

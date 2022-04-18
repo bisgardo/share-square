@@ -7,6 +7,7 @@ import Dict
 import Domain.Expense as Expense exposing (Expense)
 import Domain.Participant as Participant exposing (Participant)
 import Domain.Payment as Payment exposing (Payment)
+import Domain.Settlement as Settlement
 import Expense
 import Html exposing (Html)
 import Html.Attributes
@@ -97,6 +98,7 @@ type alias StorageValues =
     , expenses : List Expense
     , payments : List Payment
     , config : StorageConfig
+    , settledBy : Settlement.SettledBy
     }
 
 
@@ -135,7 +137,21 @@ encodeStorageConfig values =
 storageValuesDecoder : Decoder StorageValues
 storageValuesDecoder =
     Decode.map4
-        StorageValues
+        (\participantsAndSettledBy expenses payments config ->
+            let
+                participants =
+                    participantsAndSettledBy |> List.map Tuple.first
+
+                settledBy =
+                    participantsAndSettledBy
+                        |> List.foldl
+                            (\( participant, participantSettledBy ) ->
+                                Dict.update participant.id (always participantSettledBy)
+                            )
+                            Dict.empty
+            in
+            StorageValues participants expenses payments config settledBy
+        )
         -- participants
         (Decode.field "p" <| Decode.list Participant.decoder)
         -- expenses
@@ -146,9 +162,18 @@ storageValuesDecoder =
         (Decode.field "c" <| storageConfigDecoder)
 
 
+withSettledBy : Settlement.SettledBy -> List Participant -> List ( Participant, Maybe Participant.Id )
+withSettledBy settledBy participants =
+    participants
+        |> List.map
+            (\participant ->
+                ( participant, settledBy |> Dict.get participant.id )
+            )
+
+
 encodeStorageValues : StorageValues -> Value
 encodeStorageValues values =
-    [ ( "p", values.participants |> Encode.list Participant.encode )
+    [ ( "p", values.participants |> withSettledBy values.settledBy |> Encode.list Participant.encode )
     , ( "e", values.expenses |> Encode.list Expense.encode )
     , ( "y", values.payments |> Encode.list Payment.encode )
     , ( "c", values.config |> encodeStorageConfig )
@@ -231,8 +256,8 @@ subscriptions model =
                     StorageValuesLoaded Nothing
 
                 Just ( _, revision, values ) ->
-                    StorageValuesLoaded
-                        (Just
+                    StorageValuesLoaded <|
+                        Just
                             ( revision
                             , (case extractVersion values of
                                 Just ( version, data ) ->
@@ -242,14 +267,13 @@ subscriptions model =
                                             |> Result.mapError (ParseError << Decode.errorToString)
 
                                     else
-                                        Err (UnknownSchemaVersion version)
+                                        Err <| UnknownSchemaVersion version
 
                                 _ ->
-                                    Err (InvalidFormat values)
+                                    Err <| InvalidFormat values
                               )
                                 |> Result.mapError (StorageError << ReadError)
                             )
-                        )
         )
     , Storage.valueStored (\( _, result ) -> StorageValuesStored result)
     ]
@@ -513,7 +537,8 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Settlement.update model.config model.expense.participant computationMsg
+                    model.computation
+                        |> Settlement.update model.config model.expense.participant computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch
@@ -564,7 +589,16 @@ update msg model =
         StorageValuesStored result ->
             case result of
                 Err storedRevision ->
-                    ( { model | errors = model.errors ++ [ StorageError <| WriteError <| RevisionMismatch storedRevision model.storageRevision ] }, Cmd.none )
+                    ( { model
+                        | errors =
+                            model.errors
+                                ++ [ StorageError <|
+                                        WriteError <|
+                                            RevisionMismatch storedRevision model.storageRevision
+                                   ]
+                      }
+                    , Cmd.none
+                    )
 
                 Ok revision ->
                     ( { model | storageRevision = revision }, Cmd.none )
@@ -580,7 +614,14 @@ update msg model =
                     model.storageMode
                         |> Storage.storeValue storageDataKey
                             model.storageRevision
-                            (schemaVersion ++ schemaVersionSplitter ++ (model |> export |> encodeStorageValues |> Encode.encode 0))
+                            (schemaVersion
+                                ++ schemaVersionSplitter
+                                ++ (model
+                                        |> export
+                                        |> encodeStorageValues
+                                        |> Encode.encode 0
+                                   )
+                            )
             )
 
         UrlRequested _ ->
@@ -598,7 +639,7 @@ import_ revision values model =
                 |> Expense.import_ values.participants values.expenses
         , computation =
             model.computation
-                |> Settlement.import_ values.payments
+                |> Settlement.import_ values.payments values.settledBy
         , storageRevision = revision
         , config =
             let
@@ -623,4 +664,5 @@ export model =
     , expenses = model.expense.expenses
     , payments = model.computation.payment.payments
     , config = { decimalPlaces = model.config.amount.decimalPlaces }
+    , settledBy = model.computation.settledBy
     }

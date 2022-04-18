@@ -225,7 +225,7 @@ create id name =
         Err "cannot create participant with empty name"
 
     else
-        Ok <| Participant id (name |> cleanName) Nothing
+        Ok <| Participant id (name |> cleanName)
 
 
 cleanName : String -> String
