@@ -151,7 +151,7 @@ view config participantModel model =
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
-                , Html.th [ Html.Attributes.scope "col" ] <|
+                , Html.th [ Html.Attributes.scope "col" ]
                     [ Html.text "Done"
                     , let
                         plannedPayments =
@@ -185,9 +185,26 @@ view config participantModel model =
                         ( id
                         , Html.tr []
                             [ Html.td [] [ Html.text id ]
-                            , Html.td [] [ Html.text (participantModel.participants |> Dict.get payment.payer |> Participant.safeName payment.payer) ]
-                            , Html.td [] [ Html.text (participantModel.participants |> Dict.get payment.receiver |> Participant.safeName payment.receiver) ]
-                            , Html.td [] [ Html.text (payment.amount |> Amount.toString config.amount) ]
+                            , Html.td []
+                                [ Html.text
+                                    (participantModel.participants
+                                        |> Dict.get payment.payer
+                                        |> Participant.safeName payment.payer
+                                    )
+                                ]
+                            , Html.td []
+                                [ Html.text
+                                    (participantModel.participants
+                                        |> Dict.get payment.receiver
+                                        |> Participant.safeName payment.receiver
+                                    )
+                                ]
+                            , Html.td []
+                                [ Html.text
+                                    (payment.amount
+                                        |> Amount.toString config.amount
+                                    )
+                                ]
                             , Html.td []
                                 [ Html.input
                                     [ Html.Attributes.type_ "checkbox"
@@ -347,7 +364,9 @@ viewAdd config participantModel model =
                     (\suggestedAmount ->
                         let
                             label =
-                                suggestedAmount.label ++ ": " ++ (suggestedAmount.amount |> Amount.toString config.amount)
+                                suggestedAmount.label
+                                    ++ ": "
+                                    ++ (suggestedAmount.amount |> Amount.toString config.amount)
                         in
                         div []
                             [ if suggestedAmount.selected then
@@ -356,7 +375,11 @@ viewAdd config participantModel model =
                               else
                                 Layout.internalLink
                                     (CreateApplySuggestedAmount suggestedAmount.amount)
-                                    [ text <| suggestedAmount.label ++ ": " ++ (suggestedAmount.amount |> Amount.toString config.amount) ]
+                                    [ text <|
+                                        suggestedAmount.label
+                                            ++ ": "
+                                            ++ (suggestedAmount.amount |> Amount.toString config.amount)
+                                    ]
                             ]
                     )
             )
@@ -386,8 +409,16 @@ viewAdd config participantModel model =
                     []
 
                 Just suggestedPayment ->
-                    [ div [] [ text <| "Payer balance after payment: " ++ (-suggestedPayment.payerOwingAmount + amount |> Amount.toString config.amount) ]
-                    , div [] [ text <| "Receiver balance after payment: " ++ (suggestedPayment.receiverOwedAmount - amount |> Amount.toString config.amount) ]
+                    [ div []
+                        [ text <|
+                            "Payer balance after payment: "
+                                ++ (-suggestedPayment.payerOwingAmount + amount |> Amount.toString config.amount)
+                        ]
+                    , div []
+                        [ text <|
+                            "Receiver balance after payment: "
+                                ++ (suggestedPayment.receiverOwedAmount - amount |> Amount.toString config.amount)
+                        ]
                     ]
         ]
     , Html.fieldset [ Html.Attributes.class "row mb-3" ]

@@ -235,12 +235,22 @@ view config model =
                         ( id
                         , Html.tr []
                             ([ Html.td [] [ Html.text id ]
-                             , Html.td [] [ Html.text (model.participant.participants |> Dict.get expense.payer |> Participant.safeName expense.payer) ]
+                             , Html.td []
+                                [ Html.text
+                                    (model.participant.participants
+                                        |> Dict.get expense.payer
+                                        |> Participant.safeName expense.payer
+                                    )
+                                ]
                              , Html.td []
                                 [ Html.span
                                     [ data "bs-toggle" "tooltip"
                                     , data "bs-placement" "bottom"
-                                    , Html.Attributes.title <| ((expense.amount // Dict.size expense.receivers) |> Amount.toString config.amount) ++ " per participant"
+                                    , Html.Attributes.title <|
+                                        ((expense.amount // Dict.size expense.receivers)
+                                            |> Amount.toString config.amount
+                                        )
+                                            ++ " per participant"
                                     ]
                                     [ Html.text (expense.amount |> Amount.toString config.amount)
                                     ]
@@ -344,7 +354,16 @@ viewCreateModal model =
     in
     Html.form
         [ Html.Events.onSubmit CreateSubmit ]
-        [ modal createModalId "Add expense" body disable (model.create |> Maybe.andThen .editId |> Maybe.map Delete) ]
+        [ modal
+            createModalId
+            "Add expense"
+            body
+            disable
+            (model.create
+                |> Maybe.andThen .editId
+                |> Maybe.map Delete
+            )
+        ]
 
 
 viewAdd : Participant.Model -> CreateModel -> List (Html Msg)
@@ -352,7 +371,12 @@ viewAdd participantModel model =
     let
         participantsFields =
             participantModel.order
-                |> List.map (\participantId -> participantModel.participants |> Dict.get participantId |> Maybe.map Participant.toField)
+                |> List.map
+                    (\participantId ->
+                        participantModel.participants
+                            |> Dict.get participantId
+                            |> Maybe.map Participant.toField
+                    )
                 |> Maybe.values
     in
     [ optionsInput "new-expense-payer" "Payer" { fields = participantsFields, feedback = None } model.payerId CreateEditPayer
@@ -426,8 +450,7 @@ update config msg model =
                                     in
                                     Just
                                         { newCreateModel
-                                            | description =
-                                                { descriptionField | value = expense.description }
+                                            | description = { descriptionField | value = expense.description }
                                             , amount = { amountField | value = expense.amount |> Amount.toString config.amount }
                                             , editId = editId
                                         }
@@ -490,7 +513,9 @@ update config msg model =
 
                                 Ok value ->
                                     ( ( { model
-                                            | expenses = model.expenses |> List.setIf (.id >> (==) editId) value
+                                            | expenses =
+                                                model.expenses
+                                                    |> List.setIf (.id >> (==) editId) value
                                         }
                                       , True
                                       )
@@ -528,7 +553,11 @@ update config msg model =
                                         | amount =
                                             { amountField
                                                 | value = amount
-                                                , feedback = validateAmountInput config.amount validateExpenseAmount amount
+                                                , feedback =
+                                                    validateAmountInput
+                                                        config.amount
+                                                        validateExpenseAmount
+                                                        amount
                                             }
                                     }
                                 )

@@ -153,22 +153,34 @@ validationFeedback feedback =
 
         Info message ->
             ( []
-            , [ div [ class "valid-feedback text-muted fst-italic", Html.Attributes.style "display" "block" ] [ text message ] ]
+            , [ div
+                    [ class "valid-feedback text-muted fst-italic", Html.Attributes.style "display" "block" ]
+                    [ text message ]
+              ]
             )
 
         Success message ->
             ( [ class "is-valid" ]
-            , [ div [ class "valid-feedback" ] [ text message ] ]
+            , [ div
+                    [ class "valid-feedback" ]
+                    [ text message ]
+              ]
             )
 
         Warning message ->
             ( [ class "is-invalid border border-warning", Html.Attributes.style "background-size" "0" ]
-            , [ div [ class "invalid-feedback text-warning" ] [ text message ] ]
+            , [ div
+                    [ class "invalid-feedback text-warning" ]
+                    [ text message ]
+              ]
             )
 
         Error message ->
             ( [ class "is-invalid" ]
-            , [ div [ class "invalid-feedback" ] [ text message ] ]
+            , [ div
+                    [ class "invalid-feedback" ]
+                    [ text message ]
+              ]
             )
 
 

@@ -208,12 +208,20 @@ import_ participants model =
                 |> List.map .id
         , participants =
             participants
-                |> List.foldl (\participant -> Dict.insert participant.id participant) Dict.empty
+                |> List.foldl
+                    (\participant ->
+                        Dict.insert participant.id participant
+                    )
+                    Dict.empty
         , create = Nothing
         , nextId =
             1
                 + (participants
-                    |> List.foldl (\participant -> max participant.id) (model.nextId - 1)
+                    |> List.foldl
+                        (\participant ->
+                            max participant.id
+                        )
+                        (model.nextId - 1)
                   )
     }
 

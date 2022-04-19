@@ -1,7 +1,6 @@
 module Domain.Settlement exposing (..)
 
 import Dict exposing (Dict)
-import Domain.Amount exposing (Amount)
 import Domain.Balance as Balance exposing (Balances)
 import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
 import Domain.Participant as Participant exposing (Participant, Participants)
@@ -55,7 +54,11 @@ computeSuggestedPayments balances paymentBalance participants payments settledBy
         |> Dict.sumValues paymentBalance
         |> applySettledBy participants settledBy payments
         |> Suggestion.autosuggestPayments
-        |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId payments payerId))
+        |> Dict.map
+            (\payerId ->
+                List.map
+                    (Suggestion.withExistingPaymentId payments payerId)
+            )
 
 
 applySettledBy : List Participant -> SettledBy -> List Payment -> Balances -> Balances
