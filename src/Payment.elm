@@ -531,10 +531,10 @@ update config balances msg model =
                                         , suggestedPayment =
                                             Just
                                                 (balances
+                                                    |> Dict.sumValues model.paymentBalance
                                                     |> suggestPaymentAmounts
                                                         payerId
                                                         createModel.receiverId
-                                                        model.paymentBalance
                                                 )
                                     }
                                 )
@@ -555,10 +555,10 @@ update config balances msg model =
                                         , suggestedPayment =
                                             Just
                                                 (balances
+                                                    |> Dict.sumValues model.paymentBalance
                                                     |> suggestPaymentAmounts
                                                         createModel.payerId
                                                         receiverId
-                                                        model.paymentBalance
                                                 )
                                     }
                                 )
@@ -786,8 +786,8 @@ type alias PaymentSuggestion =
     }
 
 
-suggestPaymentAmounts : String -> String -> Balances -> Balances -> PaymentSuggestion
-suggestPaymentAmounts payer receiver paymentBalance balance =
+suggestPaymentAmounts : String -> String -> Balances -> PaymentSuggestion
+suggestPaymentAmounts payer receiver balance =
     -- TODO Return error if ID parsing fails.
     let
         payerId =
@@ -797,18 +797,13 @@ suggestPaymentAmounts payer receiver paymentBalance balance =
             receiver |> Participant.idFromString |> Maybe.withDefault 0
 
         payerBalance =
-            lookupBalanceSum payerId paymentBalance balance
+            balance |> Balance.lookup payerId
 
         receiverBalance =
-            lookupBalanceSum receiverId paymentBalance balance
+            balance |> Balance.lookup receiverId
     in
     { payerId = payerId
     , receiverId = receiverId
     , payerOwingAmount = -payerBalance
     , receiverOwedAmount = receiverBalance
     }
-
-
-lookupBalanceSum : Participant.Id -> Balances -> Balances -> Amount
-lookupBalanceSum participantId paymentBalance balance =
-    (balance |> Balance.lookup participantId) + (paymentBalance |> Balance.lookup participantId)

@@ -35,19 +35,21 @@ compute participants expenseList paymentBalance payments =
                             |> Dict.insert participantId
                     )
                     Dict.empty
-
-        suggestedPayments =
-            balances
-                |> Dict.sumValues paymentBalance
-                |> Suggestion.autosuggestPayments
-                |> Dict.map
-                    (\payerId ->
-                        List.map
-                            (Suggestion.withExistingPaymentId payments payerId)
-                    )
     in
     { expenses = expenses
     , debts = debts
     , balance = balances
-    , suggestedPayments = suggestedPayments
+    , suggestedPayments = computeSuggestedPayments balances paymentBalance payments
     }
+
+
+computeSuggestedPayments : Balances -> Balances -> List Payment -> SuggestedPayments
+computeSuggestedPayments balances paymentBalance payments =
+    balances
+        |> Dict.sumValues paymentBalance
+        |> Suggestion.autosuggestPayments
+        |> Dict.map
+            (\payerId ->
+                List.map
+                    (Suggestion.withExistingPaymentId payments payerId)
+            )
