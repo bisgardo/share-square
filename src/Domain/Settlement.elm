@@ -1,7 +1,6 @@
 module Domain.Settlement exposing (..)
 
 import Dict exposing (Dict)
-import Domain.Amount exposing (Amount)
 import Domain.Balance as Balance exposing (Balances)
 import Domain.Expense as Expense exposing (Debt, Expense, Expenses)
 import Domain.Participant as Participant exposing (Participant, Participants)
@@ -18,7 +17,7 @@ type alias Computed =
     }
 
 
-compute : List Participant -> List Expense -> Dict Participant.Id Amount -> List Payment -> Computed
+compute : List Participant -> List Expense -> Balances -> List Payment -> Computed
 compute participants expenseList paymentBalance payments =
     let
         expenses =
@@ -41,7 +40,11 @@ compute participants expenseList paymentBalance payments =
             balances
                 |> Dict.sumValues paymentBalance
                 |> Suggestion.autosuggestPayments
-                |> Dict.map (\payerId -> List.map (Suggestion.withExistingPaymentId payments payerId))
+                |> Dict.map
+                    (\payerId ->
+                        List.map
+                            (Suggestion.withExistingPaymentId payments payerId)
+                    )
     in
     { expenses = expenses
     , debts = debts

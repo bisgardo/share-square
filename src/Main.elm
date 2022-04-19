@@ -231,8 +231,8 @@ subscriptions model =
                     StorageValuesLoaded Nothing
 
                 Just ( _, revision, values ) ->
-                    StorageValuesLoaded
-                        (Just
+                    StorageValuesLoaded <|
+                        Just
                             ( revision
                             , (case extractVersion values of
                                 Just ( version, data ) ->
@@ -242,14 +242,13 @@ subscriptions model =
                                             |> Result.mapError (ParseError << Decode.errorToString)
 
                                     else
-                                        Err (UnknownSchemaVersion version)
+                                        Err <| UnknownSchemaVersion version
 
                                 _ ->
-                                    Err (InvalidFormat values)
+                                    Err <| InvalidFormat values
                               )
                                 |> Result.mapError (StorageError << ReadError)
                             )
-                        )
         )
     , Storage.valueStored (\( _, result ) -> StorageValuesStored result)
     ]
@@ -513,7 +512,8 @@ update msg model =
         ComputationMsg computationMsg ->
             let
                 ( ( computationModel, modelChanged ), computationCmd ) =
-                    model.computation |> Settlement.update model.config computationMsg
+                    model.computation
+                        |> Settlement.update model.config computationMsg
             in
             ( { model | computation = computationModel }
             , Cmd.batch
@@ -564,7 +564,16 @@ update msg model =
         StorageValuesStored result ->
             case result of
                 Err storedRevision ->
-                    ( { model | errors = model.errors ++ [ StorageError <| WriteError <| RevisionMismatch storedRevision model.storageRevision ] }, Cmd.none )
+                    ( { model
+                        | errors =
+                            model.errors
+                                ++ [ StorageError <|
+                                        WriteError <|
+                                            RevisionMismatch storedRevision model.storageRevision
+                                   ]
+                      }
+                    , Cmd.none
+                    )
 
                 Ok revision ->
                     ( { model | storageRevision = revision }, Cmd.none )
@@ -580,7 +589,14 @@ update msg model =
                     model.storageMode
                         |> Storage.storeValue storageDataKey
                             model.storageRevision
-                            (schemaVersion ++ schemaVersionSplitter ++ (model |> export |> encodeStorageValues |> Encode.encode 0))
+                            (schemaVersion
+                                ++ schemaVersionSplitter
+                                ++ (model
+                                        |> export
+                                        |> encodeStorageValues
+                                        |> Encode.encode 0
+                                   )
+                            )
             )
 
         UrlRequested _ ->

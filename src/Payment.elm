@@ -150,7 +150,7 @@ view config participantModel model =
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Payer" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Receiver" ]
                 , Html.th [ Html.Attributes.scope "col" ] [ Html.text "Amount" ]
-                , Html.th [ Html.Attributes.scope "col" ] <|
+                , Html.th [ Html.Attributes.scope "col" ]
                     [ Html.text "Done"
                     , let
                         plannedPayments =
@@ -184,9 +184,26 @@ view config participantModel model =
                         ( id
                         , Html.tr []
                             [ Html.td [] [ Html.text id ]
-                            , Html.td [] [ Html.text (participantModel.participants |> Dict.get payment.payer |> Participant.safeName payment.payer) ]
-                            , Html.td [] [ Html.text (participantModel.participants |> Dict.get payment.receiver |> Participant.safeName payment.receiver) ]
-                            , Html.td [] [ Html.text (payment.amount |> Amount.toString config.amount) ]
+                            , Html.td []
+                                [ Html.text
+                                    (participantModel.participants
+                                        |> Dict.get payment.payer
+                                        |> Participant.safeName payment.payer
+                                    )
+                                ]
+                            , Html.td []
+                                [ Html.text
+                                    (participantModel.participants
+                                        |> Dict.get payment.receiver
+                                        |> Participant.safeName payment.receiver
+                                    )
+                                ]
+                            , Html.td []
+                                [ Html.text
+                                    (payment.amount
+                                        |> Amount.toString config.amount
+                                    )
+                                ]
                             , Html.td []
                                 [ Html.input
                                     [ Html.Attributes.type_ "checkbox"
@@ -268,7 +285,12 @@ viewAdd config participantModel model =
 
         participantsFields =
             participantModel.order
-                |> List.map (\participantId -> participantModel.participants |> Dict.get participantId |> Maybe.map Participant.toField)
+                |> List.map
+                    (\participantId ->
+                        participantModel.participants
+                            |> Dict.get participantId
+                            |> Maybe.map Participant.toField
+                    )
                 |> Maybe.values
 
         ( payerFeedback, receiverFeedback, suggestedPayments ) =
@@ -283,14 +305,20 @@ viewAdd config participantModel model =
                     Just suggestedPayment ->
                         ( if suggestedPayment.payerOwingAmount <= 0 then
                             Info <|
-                                (participantModel.participants |> Dict.get suggestedPayment.payerId |> Participant.safeName suggestedPayment.payerId)
+                                (participantModel.participants
+                                    |> Dict.get suggestedPayment.payerId
+                                    |> Participant.safeName suggestedPayment.payerId
+                                )
                                     ++ " doesn't owe anything."
 
                           else
                             None
                         , if suggestedPayment.receiverOwedAmount <= 0 then
                             Info <|
-                                (participantModel.participants |> Dict.get suggestedPayment.receiverId |> Participant.safeName suggestedPayment.receiverId)
+                                (participantModel.participants
+                                    |> Dict.get suggestedPayment.receiverId
+                                    |> Participant.safeName suggestedPayment.receiverId
+                                )
                                     ++ " isn't owed anything."
 
                           else
@@ -307,12 +335,14 @@ viewAdd config participantModel model =
                             |> List.filter (.amount >> Number.isPositive)
                         )
     in
-    [ optionsInput "new-payments-payer"
+    [ optionsInput
+        "new-payments-payer"
         "Payer"
         { fields = participantsFields, feedback = payerFeedback }
         model.payerId
         CreateEditPayer
-    , optionsInput "new-payments-receiver"
+    , optionsInput
+        "new-payments-receiver"
         "Receiver"
         { fields = participantsFields, feedback = receiverFeedback }
         model.receiverId
@@ -333,7 +363,9 @@ viewAdd config participantModel model =
                     (\suggestedAmount ->
                         let
                             label =
-                                suggestedAmount.label ++ ": " ++ (suggestedAmount.amount |> Amount.toString config.amount)
+                                suggestedAmount.label
+                                    ++ ": "
+                                    ++ (suggestedAmount.amount |> Amount.toString config.amount)
                         in
                         div []
                             [ if suggestedAmount.selected then
@@ -342,7 +374,11 @@ viewAdd config participantModel model =
                               else
                                 Layout.internalLink
                                     (CreateApplySuggestedAmount suggestedAmount.amount)
-                                    [ text <| suggestedAmount.label ++ ": " ++ (suggestedAmount.amount |> Amount.toString config.amount) ]
+                                    [ text <|
+                                        suggestedAmount.label
+                                            ++ ": "
+                                            ++ (suggestedAmount.amount |> Amount.toString config.amount)
+                                    ]
                             ]
                     )
             )
@@ -372,8 +408,16 @@ viewAdd config participantModel model =
                     []
 
                 Just suggestedPayment ->
-                    [ div [] [ text <| "Payer balance after payment: " ++ (-suggestedPayment.payerOwingAmount + amount |> Amount.toString config.amount) ]
-                    , div [] [ text <| "Receiver balance after payment: " ++ (suggestedPayment.receiverOwedAmount - amount |> Amount.toString config.amount) ]
+                    [ div []
+                        [ text <|
+                            "Payer balance after payment: "
+                                ++ (-suggestedPayment.payerOwingAmount + amount |> Amount.toString config.amount)
+                        ]
+                    , div []
+                        [ text <|
+                            "Receiver balance after payment: "
+                                ++ (suggestedPayment.receiverOwedAmount - amount |> Amount.toString config.amount)
+                        ]
                     ]
         ]
     , Html.fieldset [ Html.Attributes.class "row mb-3" ]
@@ -455,7 +499,8 @@ update config balances msg model =
               )
             , Cmd.none
             )
-                |> Update.chains (Update.withPairModel (update config balances) (||))
+                |> Update.chains
+                    (Update.withPairModel (update config balances) (||))
                     ((case firstNegativeBalanceParticipantId |> Maybe.orElse firstParticipantFallbackId of
                         Nothing ->
                             []

@@ -258,7 +258,11 @@ update config msg model =
         PaymentMsg paymentMsg ->
             let
                 ( ( paymentModel, modelChanged ), paymentCmd ) =
-                    model.payment |> Payment.update config (model.computed |> Maybe.unwrap Dict.empty .balance) paymentMsg
+                    model.payment
+                        |> Payment.update
+                            config
+                            (model.computed |> Maybe.unwrap Dict.empty .balance)
+                            paymentMsg
             in
             ( ( { model
                     | payment = paymentModel
