@@ -205,13 +205,29 @@ view config model =
                             |> (\htmls ->
                                     -- Ensure that there is at least 1 cell.
                                     if htmls |> List.isEmpty then
-                                        -- HACK Using best-guess value for next ID as key in attempt to prevent
+                                        -- HACK Using specific key in an attempt to prevent
                                         -- redundant removal/reinsertion of the cell containing the '+' button
                                         -- (see 'https://github.com/elm/virtual-dom/issues/178').
-                                        -- This breaks the focus originally put on the element,
-                                        -- but due to the mutation observer also causes the tooltip to be
+                                        -- Such behavior breaks the focus originally put on the element.
+                                        -- Additionally, due to the mutation observer, it also causes the tooltip to be
                                         -- disposed and recreated for no good reason.
-                                        [ ( model.participant.nextId |> Participant.idToString, Html.td [] [ Html.i [] [ Html.text "None" ] ] ) ]
+                                        -- The hack works until more than 3 participants are loaded from storage.
+                                        -- The bug kicks in when more than one consecutive cell is inserted -
+                                        -- all subsequent cells then get momentarily detached from the DOM.
+                                        -- The key "2" is therefore the only value that avoids the bug
+                                        -- when this cell gets replaced by either 1, 2, or 3 cells
+                                        -- (with keys numbered sequentially from 1 as they normally would be):
+                                        -- * 1 cell: the cell is replaced.
+                                        -- * 2 cells: the cell is replaced and a single one inserted before.
+                                        -- * 3 cells: the cell is replaced and single ones inserted before and after.
+                                        -- In order to make this work for more than 3 cells,
+                                        -- it seems that we would need to insert each cell in its own rendering step...
+                                        -- A simpler workaround might be deferring the command giving focus
+                                        -- until after the data has been loaded from storage?
+                                        [ ( "2"
+                                          , Html.td [] [ Html.i [] [ Html.text "None" ] ]
+                                          )
+                                        ]
 
                                     else
                                         htmls
